@@ -2,25 +2,179 @@ name: Project Board Automation
 
 on:
   pull_request:
-    types: [opened, ready_for_review, reopened, closed]
+    types: [opened, reopened, closed]
+
+env:
+  PROJECT_URL: "https://github.com/users/repoeli/projects/9"
+  GITHUB_TOKEN: ${{ secrets.ADD_TO_PROJECT_PAT }}
 
 jobs:
-  move-to-in-progress:
-    if: github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened'
+  automate-project-board:
     runs-on: ubuntu-latest
     steps:
-      - name: Move linked issues to In Progress
-        uses: actions/add-to-project@v0.6.1
-        with:
-          project-url: https://github.com/users/repoeli/projects/9
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get linked issues
+        id: get-issues
+        run: |
+          issue_numbers=$(echo "${{ github.event.pull_request.body }}" | grep -oP "(?<=closes|fixes) #\d+" | grep -oP "\d+")
+          if [ -z "$issue_numbers" ]; then
+            echo "No linked issues found."
+            echo "issues=[]" >> $GITHUB_OUTPUT
+          else
+            echo "Found issues: $issue_numbers"
+            echo "issues=$(echo "$issue_numbers" | jq -R . | jq -s .)" >> $GITHUB_OUTPUT
+          fi
 
-  move-to-done:
-    if: github.event.action == 'closed' && github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - name: Move linked issues to Done
-        uses: actions/add-to-project@v0.6.1
+      - name: Move issue to 'In Progress'
+        if: (github.event.action == 'opened' || github.event.action == 'reopened') && steps.get-issues.outputs.issues != '[]'
+        uses: actions/github-script@v7
         with:
-          project-url: https://github.com/users/repoeli/projects/9
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issues = ${{ steps.get-issues.outputs.issues }};
+            const projectUrl = process.env.PROJECT_URL;
+            const { owner, repo } = context.repo;
+
+            // Get project and status field IDs
+            const projectData = await github.graphql(`
+              query($projectUrl: URI!) {
+                resource(url: $projectUrl) {
+                  ... on ProjectV2 {
+                    id
+                    field(name: "Status") {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { projectUrl });
+
+            const projectId = projectData.resource.id;
+            const statusField = projectData.resource.field;
+            const statusFieldId = statusField.id;
+            const inProgressOption = statusField.options.find(o => o.name === "In Progress");
+            if (!inProgressOption) {
+              core.setFailed("Could not find 'In Progress' option in project status field.");
+              return;
+            }
+            const inProgressOptionId = inProgressOption.id;
+
+            for (const issueNumber of issues) {
+              // Get issue's global node ID
+              const issueData = await github.graphql(`
+                query($owner: String!, $repo: String!, $issueNumber: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    issue(number: $issueNumber) { id }
+                  }
+                }
+              `, { owner, repo, issueNumber: parseInt(issueNumber) });
+              const issueId = issueData.repository.issue.id;
+
+              // Add issue to project
+              const addItemData = await github.graphql(`
+                mutation($projectId: ID!, $contentId: ID!) {
+                  addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+                    item { id }
+                  }
+                }
+              `, { projectId, contentId: issueId });
+              const itemId = addItemData.addProjectV2ItemById.item.id;
+
+              // Set status to 'In Progress'
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, { projectId, itemId, fieldId: statusFieldId, optionId: inProgressOptionId });
+
+              console.log(`Moved issue #${issueNumber} to 'In Progress'.`);
+            }
+
+      - name: Move issue to 'Done'
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true && steps.get-issues.outputs.issues != '[]'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = ${{ steps.get-issues.outputs.issues }};
+            const projectUrl = process.env.PROJECT_URL;
+            const { owner, repo } = context.repo;
+
+            // Get project and status field IDs
+            const projectData = await github.graphql(`
+              query($projectUrl: URI!) {
+                resource(url: $projectUrl) {
+                  ... on ProjectV2 {
+                    id
+                    field(name: "Status") {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+            `, { projectUrl });
+
+            const projectId = projectData.resource.id;
+            const statusField = projectData.resource.field;
+            const statusFieldId = statusField.id;
+            const doneOption = statusField.options.find(o => o.name === "Done");
+            if (!doneOption) {
+              core.setFailed("Could not find 'Done' option in project status field.");
+              return;
+            }
+            const doneOptionId = doneOption.id;
+
+            for (const issueNumber of issues) {
+              // Find the project item ID for the issue
+              const itemData = await github.graphql(`
+                query($projectUrl: URI!, $issueNumber: Int!) {
+                  resource(url: $projectUrl) {
+                    ... on ProjectV2 {
+                      items(first: 100) {
+                        nodes {
+                          id
+                          content {
+                            ... on Issue {
+                              number
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              `, { projectUrl, issueNumber: parseInt(issueNumber) });
+
+              const item = itemData.resource.items.nodes.find(item => item.content.number == issueNumber);
+              if (!item) {
+                console.log(`Issue #${issueNumber} not found in project, skipping.`);
+                continue;
+              }
+              const itemId = item.id;
+
+              // Set status to 'Done'
+              await github.graphql(`
+                mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+                  updateProjectV2ItemFieldValue(input: {
+                    projectId: $projectId,
+                    itemId: $itemId,
+                    fieldId: $fieldId,
+                    value: { singleSelectOptionId: $optionId }
+                  }) {
+                    projectV2Item { id }
+                  }
+                }
+              `, { projectId, itemId, fieldId: statusFieldId, optionId: doneOptionId });
+
+              console.log(`Moved issue #${issueNumber} to 'Done'.`);
+            }

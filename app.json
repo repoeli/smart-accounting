@@ -1,0 +1,72 @@
+{
+  "name": "Smart Accounting",
+  "description": "A web application for smart accounting with OCR receipt data extraction",
+  "repository": "https://github.com/repoeli/smart-accounting",
+  "keywords": ["python", "django", "react", "accounting", "ocr"],
+  "env": {
+    "SECRET_KEY": {
+      "description": "A secret key for Django",
+      "generator": "secret"
+    },
+    "DEBUG": {
+      "description": "Enable debug mode",
+      "value": "False"
+    },
+    "ALLOWED_HOSTS": {
+      "description": "Comma-separated list of allowed hosts",
+      "value": "localhost,127.0.0.1,.herokuapp.com"
+    },
+    "CORS_ALLOWED_ORIGINS": {
+      "description": "Comma-separated list of CORS allowed origins",
+      "value": "http://localhost:3000,https://*.herokuapp.com"
+    },
+    "DATABASE_SSL": {
+      "description": "Whether to use SSL for database connections",
+      "value": "True"
+    },
+    "VERYFI_CLIENT_ID": {
+      "description": "Veryfi Client ID",
+      "required": false
+    },
+    "VERYFI_CLIENT_SECRET": {
+      "description": "Veryfi Client Secret",
+      "required": false
+    },
+    "VERYFI_USERNAME": {
+      "description": "Veryfi Username",
+      "required": false
+    },
+    "VERYFI_API_KEY": {
+      "description": "Veryfi API Key",
+      "required": false
+    },
+    "STRIPE_API_PUBLISHABLE_KEY": {
+      "description": "Stripe Publishable Key",
+      "required": false
+    },
+    "STRIPE_API_SECRET_KEY": {
+      "description": "Stripe Secret Key",
+      "required": false
+    },
+    "STRIPE_WEBHOOK_SECRET": {
+      "description": "Stripe Webhook Secret",
+      "required": false
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:hobby-dev"
+    }
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   db:
@@ -21,7 +19,7 @@ services:
   # Django Backend
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     command: >
       sh -c "python manage.py migrate &&
