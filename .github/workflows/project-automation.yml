@@ -1,0 +1,26 @@
+name: Project Board Automation
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, closed]
+
+jobs:
+  move-to-in-progress:
+    if: github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move linked issues to In Progress
+        uses: actions/add-to-project@v0.6.1
+        with:
+          project-url: https://github.com/users/repoeli/projects/9
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  move-to-done:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Move linked issues to Done
+        uses: actions/add-to-project@v0.6.1
+        with:
+          project-url: https://github.com/users/repoeli/projects/9
+          github-token: ${{ secrets.GITHUB_TOKEN }}

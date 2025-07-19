@@ -1,5 +1,44 @@
 # Smart Accounts Management System - Django Project Structure
 
+## High-Level Architecture Diagram
+
+```
+┌────────────┐      ┌────────────┐      ┌────────────┐
+│  Frontend  │<---> │   Backend  │<---> │  Database  │
+│  (React)   │      │ (Django)   │      │ (Postgres) │
+└────────────┘      │            │      └────────────┘
+        ▲          │            │             ▲
+        │          │            │             │
+        │          │            │      ┌────────────┐
+        │          │            └----> │   Redis    │
+        │          │                   └────────────┘
+        │          │            ┌-------------------┐
+        │          └----------> │ Celery Workers    │
+        │                       └-------------------┘
+        │                       ┌-------------------┐
+        └---------------------> │  S3 (Documents)   │
+                                └-------------------┘
+```
+
+## Tech Stack Decisions
+- **Django**: Robust, secure, and scalable for rapid API development.
+- **Django REST Framework**: Flexible API layer, browsable docs, and strong permission system.
+- **Celery + Redis**: Asynchronous/background task processing (OCR, emails, reports).
+- **PostgreSQL**: Reliable, scalable relational database with strong support in Django.
+- **Stripe**: Industry-standard for secure subscription billing.
+- **Docker Compose**: Consistent local and production environment setup.
+- **S3**: Scalable, secure document storage.
+
+## Deployment Note
+- Use `docker-compose.yml` for local and staging deployments.
+- For production, deploy containers to AWS ECS or EC2, use RDS for Postgres, and S3 for file storage.
+- Store secrets in environment variables or AWS Secrets Manager.
+
+## API Docs & CI/CD
+- API documentation is auto-generated (see `/api/docs/` or `/swagger/` endpoint).
+- CI/CD workflows are in `.github/workflows/` (see `ci.yml`, `deploy.yml`).
+
+
 ## Recommended Folder Structure
 
 ```

@@ -113,7 +113,68 @@ The system will follow a microservice-oriented architecture with the following c
 - API endpoints for integration with other accounting software
 - Webhook support for real-time data updates
 
-## 4. Database Design
+
+## 4. Deployment Steps
+
+### 4.1 Docker Compose & Environment Variables
+- Use `docker-compose.yml` to orchestrate services (web, db, redis, celery, flower).
+- Store secrets and config in `.env` (never commit real secrets).
+- Example commands:
+  ```sh
+  docker-compose up --build
+  docker-compose exec backend python manage.py migrate
+  docker-compose exec backend python manage.py createsuperuser
+  ```
+
+### 4.2 AWS Deployment (Basic)
+- Use AWS EC2 or ECS for hosting containers.
+- Use AWS RDS for managed PostgreSQL.
+- Use AWS S3 for document storage (receipts, reports).
+- Set up environment variables for production secrets.
+- Use AWS Secrets Manager or SSM Parameter Store for sensitive data.
+
+### 4.3 Environment Variables Example
+```
+DJANGO_SECRET_KEY=your-secret
+DATABASE_URL=postgres://user:pass@db:5432/dbname
+REDIS_URL=redis://redis:6379/0
+STRIPE_API_KEY=sk_live_...
+EMAIL_HOST_USER=...
+EMAIL_HOST_PASSWORD=...
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+```
+
+## 5. Security Considerations
+
+- Use Argon2 or bcrypt for password hashing (never store plain passwords).
+- Enforce strong password policies and email verification.
+- Use JWT for authentication; set short expiry for access tokens, use refresh tokens.
+- Enable HTTPS everywhere (use AWS ACM or Let's Encrypt).
+- Rate limit login and sensitive endpoints (e.g., via Django Ratelimit).
+- Store sensitive files (receipts, reports) in S3 with private ACLs.
+- Regularly update dependencies and monitor for vulnerabilities.
+- Ensure GDPR compliance (data export, deletion, privacy policy).
+
+## 6. CI/CD Pipeline
+
+- Use GitHub Actions for:
+  - Automated testing on PRs and main branch
+  - Linting and code formatting checks
+  - Docker image build and push
+  - Deployment to AWS (ECS, EC2, or Elastic Beanstalk)
+- Example workflow files: `.github/workflows/test.yml`, `.github/workflows/deploy.yml`
+- Use Dependabot for automated dependency updates.
+
+## 7. API Documentation
+
+- Use Django REST Framework's built-in schema generation (drf-yasg or drf-spectacular) to auto-generate OpenAPI/Swagger docs.
+- Expose docs at `/api/docs/` or `/swagger/`.
+- Optionally, provide a Postman collection for external integrators.
+
+---
+
+## 8. Database Design
 
 ### 4.1 Detailed Entity Tables Design
 
