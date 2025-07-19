@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Move linked issues to In Progress
-        uses: actions/add-to-project@v0.6.1
+        uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/users/repoeli/projects/9
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Move linked issues to Done
-        uses: actions/add-to-project@v0.6.1
+        uses: actions/add-to-project@v1.0.2
         with:
           project-url: https://github.com/users/repoeli/projects/9
           github-token: ${{ secrets.GITHUB_TOKEN }}
