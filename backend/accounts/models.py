@@ -12,6 +12,10 @@ class Account(AbstractUser):
     email = models.EmailField(unique=True, help_text="Required. Email address for login and verification.")
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     company_name = models.CharField(max_length=255, blank=True, null=True)
+    address = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
     
     # Account type choices
     INDIVIDUAL = 'individual'

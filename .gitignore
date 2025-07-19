@@ -10,6 +10,9 @@ Updated_ERD_Summary.md
 USER_STORIES.md
 UI_UX.md
 HEROKU.md
+API_PROGRESS.md
+API_IMPLEMENTATION.md
+SWAGGER_FIX.md
 
 # Project-specific ERD files
 accounting_system_erd.vuerd.json
@@ -65,6 +68,7 @@ static/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example 
 
 # IDEs and editors
 .vscode/
@@ -128,3 +132,7 @@ generated_reports/
 # Database dumps
 *.sql
 *.dump
+
+
+
+node_modules

@@ -49,6 +49,8 @@ INSTALLED_APPS = [
     # Third-party apps
     "rest_framework",
     "corsheaders",
+    "drf_yasg",
+    "rest_framework_simplejwt",
     
     # Project apps
     "accounts",
@@ -243,3 +245,28 @@ STRIPE_API_VERSION = os.environ.get('STRIPE_API_VERSION', '2023-10-16')
 STRIPE_BASIC_PRICE_ID = os.environ.get('STRIPE_BASIC_PRICE_ID', '')
 STRIPE_PREMIUM_PRICE_ID = os.environ.get('STRIPE_PREMIUM_PRICE_ID', '')
 STRIPE_PLATINUM_PRICE_ID = os.environ.get('STRIPE_PLATINUM_PRICE_ID', '')
+
+# Email settings
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@smartaccounting.com')
+
+# Swagger settings
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+    'JSON_EDITOR': True,
+}

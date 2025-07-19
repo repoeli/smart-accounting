@@ -25,7 +25,8 @@ services:
       dockerfile: Dockerfile
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+             python manage.py collectstatic --noinput &&
+             uvicorn backend.asgi:application --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     depends_on:
@@ -36,6 +37,7 @@ services:
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-smart_accounts}
       - DEBUG=True
+      - PORT=8000
     volumes:
       - ./backend:/app
       - ./backend/media:/app/media
@@ -45,7 +47,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.minimal
     ports:
       - "3000:3000"
     depends_on:
@@ -53,9 +55,13 @@ services:
     env_file:
       - .env
     environment:
-      - REACT_APP_API_BASE_URL=http://localhost:8000/api
+      - REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - WDS_SOCKET_PORT=3000
     volumes:
-      - ./frontend:/app
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
       - /app/node_modules
 
 volumes:

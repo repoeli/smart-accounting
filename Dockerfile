@@ -1,5 +1,14 @@
 FROM python:3.11.9-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV DEBIAN_FRONTEND noninteractive
+
+# Set work directory
 WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
@@ -7,11 +16,19 @@ RUN apt-get update && apt-get install -y \
     libjpeg-dev \
     zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt ./
-COPY backend/requirements.txt ./backend-requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir -r backend-requirements.txt
+
+# Copy and install requirements
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the project code
 COPY backend/ .
-RUN python manage.py collectstatic --noinput
-EXPOSE $PORT
-# Use Gunicorn for production
-CMD gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT
+
+# Create directories for static and media files
+RUN mkdir -p /app/staticfiles /app/media
+
+# Expose port
+EXPOSE 8000
+
+# Run server using uvicorn instead of gunicorn for ASGI support
+CMD ["uvicorn", "backend.asgi:application", "--host", "0.0.0.0", "--port", "8000"]
