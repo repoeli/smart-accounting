@@ -1,0 +1,128 @@
+# Project-specific temporary files
+~WRL0806.tmp
+ERD_Documentation.md
+ERD_Update_Notice.md
+Follow Up Questions Answered.docx
+Recommended Structure of Clear Architectural Documentation.docx
+smart_accounts-2025-07-18T20_04_29.png
+smart_accounts-2025-07-18T20_06_35.png
+Updated_ERD_Summary.md
+USER_STORIES.md
+
+# Project-specific ERD files
+accounting_system_erd.vuerd.json
+Final_ERD.vuerd.json
+smart_accounts_ERD_clean.sql
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+static/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Docker
+.dockerignore
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+
+# OCR and document processing temp files
+tesseract_temp/
+ocr_temp/
+processed_images/
+
+# Generated reports
+reports_temp/
+generated_reports/
+
+# Database dumps
+*.sql
+*.dump
