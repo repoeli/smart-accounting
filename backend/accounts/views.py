@@ -18,7 +18,8 @@ from drf_yasg import openapi
 from .models import Account
 from .serializers import (
     RegisterSerializer, AccountSerializer, 
-    ChangePasswordSerializer, EmailVerificationSerializer
+    ChangePasswordSerializer, EmailVerificationSerializer,
+    CustomTokenObtainPairSerializer
 )
 
 
@@ -28,10 +29,13 @@ Account = get_user_model()
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Takes a set of user credentials and returns access and refresh JWT tokens.
+    Also validates account status and updates last_login timestamp.
     """
+    serializer_class = CustomTokenObtainPairSerializer
+    
     @swagger_auto_schema(
         operation_summary="Obtain JWT token pair",
-        operation_description="Exchange username and password for access and refresh tokens",
+        operation_description="Exchange email and password for access and refresh tokens. Validates account status and updates last login.",
         responses={
             200: openapi.Response(
                 description="Token pair obtained successfully",
@@ -43,7 +47,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                     }
                 )
             ),
-            401: "Authentication failed"
+            401: "Authentication failed - invalid credentials, inactive account, or unverified email"
         }
     )
     def post(self, request, *args, **kwargs):
