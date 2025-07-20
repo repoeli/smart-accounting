@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.db import models
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,8 +14,8 @@ import json
 import uuid
 import os
 
-from .models import Receipt, Transaction
-from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .models import Receipt, Transaction, Category
+from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer, CategorySerializer
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
@@ -285,3 +286,102 @@ def map_veryfi_category_to_internal(veryfi_category):
         return Transaction.OTHER
         
     return mapping.get(veryfi_category, Transaction.OTHER)
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing income and expense categories.
+    Users can view default categories and CRUD their own custom categories.
+    """
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return default categories plus user's custom categories.
+        """
+        user = self.request.user
+        return Category.objects.filter(
+            models.Q(is_default=True) | models.Q(owner=user)
+        ).distinct()
+    
+    def perform_create(self, serializer):
+        """
+        Create a new custom category for the authenticated user.
+        """
+        serializer.save(owner=self.request.user, is_default=False)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Only allow updates to user's own categories (not defaults).
+        """
+        category = self.get_object()
+        if category.is_default:
+            return Response(
+                {"error": "Default categories cannot be modified"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        if category.owner != request.user:
+            return Response(
+                {"error": "You can only modify your own categories"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+    
+    def destroy(self, request, *args, **kwargs):
+        """
+        Only allow deletion of user's own categories that are not in use.
+        """
+        category = self.get_object()
+        
+        # Check if it's a default category
+        if category.is_default:
+            return Response(
+                {"error": "Default categories cannot be deleted"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if user owns the category
+        if category.owner != request.user:
+            return Response(
+                {"error": "You can only delete your own categories"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if category is in use by transactions
+        if hasattr(category, 'transactions') and category.transactions.exists():
+            return Response(
+                {"error": "Category cannot be deleted as it is assigned to transactions"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return super().destroy(request, *args, **kwargs)
+    
+    @action(detail=False, methods=['get'])
+    @swagger_auto_schema(
+        operation_summary="Get categories by type",
+        operation_description="Filter categories by income or expense type",
+        manual_parameters=[
+            openapi.Parameter(
+                'type',
+                openapi.IN_QUERY,
+                description="Category type (income or expense)",
+                type=openapi.TYPE_STRING,
+                enum=['income', 'expense']
+            )
+        ]
+    )
+    def by_type(self, request):
+        """
+        Get categories filtered by type (income or expense).
+        """
+        category_type = request.query_params.get('type')
+        if category_type not in ['income', 'expense']:
+            return Response(
+                {"error": "Invalid type. Must be 'income' or 'expense'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        categories = self.get_queryset().filter(type=category_type)
+        serializer = self.get_serializer(categories, many=True)
+        return Response(serializer.data)
