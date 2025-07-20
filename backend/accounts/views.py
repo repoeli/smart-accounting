@@ -18,7 +18,8 @@ from drf_yasg import openapi
 from .models import Account
 from .serializers import (
     RegisterSerializer, AccountSerializer, 
-    ChangePasswordSerializer, EmailVerificationSerializer
+    ChangePasswordSerializer, EmailVerificationSerializer,
+    CustomTokenObtainPairSerializer
 )
 
 
@@ -28,7 +29,10 @@ Account = get_user_model()
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Takes a set of user credentials and returns access and refresh JWT tokens.
+    Uses email as the username field.
     """
+    serializer_class = CustomTokenObtainPairSerializer
+    
     @swagger_auto_schema(
         operation_summary="Obtain JWT token pair",
         operation_description="Exchange username and password for access and refresh tokens",

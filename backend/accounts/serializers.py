@@ -1,7 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import Account
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Custom JWT token serializer that accepts email instead of username
+    """
+    username_field = Account.USERNAME_FIELD  # Use email as username field
 
 
 class RegisterSerializer(serializers.ModelSerializer):
