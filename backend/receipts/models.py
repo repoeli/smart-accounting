@@ -155,6 +155,18 @@ class Transaction(models.Model):
     # Additional data
     line_items = models.JSONField(blank=True, null=True)
     
+    # Verification status - tracks manual review and verification
+    is_verified = models.BooleanField(default=False, help_text="Indicates if transaction has been manually verified")
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        related_name='verified_transactions',
+        null=True, 
+        blank=True,
+        help_text="User who verified this transaction"
+    )
+    verified_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when transaction was verified")
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -164,3 +176,42 @@ class Transaction(models.Model):
         
     def __str__(self):
         return f"{self.vendor_name} - £{self.total_amount} - {self.transaction_date}"
+    
+    @property
+    def requires_review(self):
+        """
+        Check if transaction requires manual review based on:
+        - Receipt OCR confidence is low (< 85%)
+        - Missing required data (vendor_name, transaction_date, total_amount)
+        - Total amount is zero or negative
+        - Not yet verified
+        """
+        if self.is_verified:
+            return False
+            
+        # Check if associated receipt has low confidence
+        if hasattr(self.receipt, 'ocr_confidence') and self.receipt.ocr_confidence is not None:
+            if self.receipt.ocr_confidence < 85:
+                return True
+        
+        # Check for missing required data
+        if not self.vendor_name or not self.transaction_date:
+            return True
+        
+        # Check for invalid amounts
+        if not self.total_amount or self.total_amount <= 0:
+            return True
+            
+        return False
+    
+    @property
+    def review_status(self):
+        """
+        Get human-readable review status
+        """
+        if self.is_verified:
+            return "verified"
+        elif self.requires_review:
+            return "needs_review"
+        else:
+            return "pending"
