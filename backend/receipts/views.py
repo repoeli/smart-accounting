@@ -14,7 +14,7 @@ import uuid
 import os
 
 from .models import Receipt, Transaction
-from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer, ReceiptReviewSerializer
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
@@ -70,6 +70,61 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
         self.process_receipt_async(receipt.id)
         
         return Response(receipt_data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['get'])
+    @swagger_auto_schema(
+        operation_summary="Get receipts needing manual review",
+        operation_description="Get all receipts that need manual review (not auto-approved)",
+        responses={
+            200: ReceiptReviewSerializer(many=True),
+        }
+    )
+    async def pending_review(self, request):
+        """
+        Get all receipts that need manual review.
+        """
+        @sync_to_async
+        def get_receipts_for_review():
+            queryset = self.get_queryset().filter(
+                ocr_status=Receipt.COMPLETED,
+                is_auto_approved=False,
+                is_manually_verified=False
+            ).select_related('transaction')
+            return list(queryset)
+        
+        receipts = await get_receipts_for_review()
+        serializer = ReceiptReviewSerializer(
+            receipts, many=True, context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['get'])
+    @swagger_auto_schema(
+        operation_summary="Get receipt with transaction for review",
+        operation_description="Get detailed receipt and transaction data for review interface",
+        responses={
+            200: ReceiptReviewSerializer,
+            404: "Receipt not found"
+        }
+    )
+    async def review_detail(self, request, pk=None):
+        """
+        Get detailed receipt and transaction data for review.
+        """
+        @sync_to_async
+        def get_receipt_for_review():
+            try:
+                receipt = self.get_queryset().select_related('transaction').get(pk=pk)
+                return receipt, True
+            except Receipt.DoesNotExist:
+                return None, False
+        
+        receipt, exists = await get_receipt_for_review()
+        if not exists:
+            return Response({"error": "Receipt not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ReceiptReviewSerializer(receipt, context={'request': request})
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     @swagger_auto_schema(
