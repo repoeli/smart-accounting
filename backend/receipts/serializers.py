@@ -1,5 +1,53 @@
 from rest_framework import serializers
-from .models import Receipt, Transaction
+from django.db import models
+from .models import Receipt, Transaction, Category
+
+
+class CategorySerializer(serializers.ModelSerializer):
+    """
+    Serializer for Category data.
+    """
+    can_be_deleted = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Category
+        fields = [
+            'id', 'name', 'type', 'description', 'owner', 'is_default',
+            'created_at', 'updated_at', 'can_be_deleted'
+        ]
+        read_only_fields = ['id', 'owner', 'is_default', 'created_at', 'updated_at', 'can_be_deleted']
+    
+    def validate(self, data):
+        """
+        Custom validation for Category creation/update.
+        """
+        # Get the user from context
+        user = self.context['request'].user
+        name = data.get('name')
+        category_type = data.get('type')
+        
+        # Check for duplicate names within the user's categories and same type
+        if name and category_type:
+            existing_query = Category.objects.filter(
+                name__iexact=name,
+                type=category_type
+            )
+            
+            # For updates, exclude the current instance
+            if self.instance:
+                existing_query = existing_query.exclude(id=self.instance.id)
+            
+            # Check for conflicts with user's categories or defaults
+            existing_query = existing_query.filter(
+                models.Q(owner=user) | models.Q(is_default=True)
+            )
+            
+            if existing_query.exists():
+                raise serializers.ValidationError(
+                    f"A {category_type} category with this name already exists."
+                )
+        
+        return data
 
 class TransactionSerializer(serializers.ModelSerializer):
     """
