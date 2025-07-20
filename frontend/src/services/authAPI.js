@@ -81,8 +81,7 @@ const authAPI = {
   // Request password reset
   requestPasswordReset: async (email) => {
     try {
-      // Endpoint needs to be implemented on the backend
-      const response = await baseAPI.post('/accounts/request-password-reset/', { email });
+      const response = await baseAPI.post('/accounts/forgot-password/', { email });
       return { success: true, data: response.data };
     } catch (error) {
       return { 
@@ -95,7 +94,6 @@ const authAPI = {
   // Reset password with token
   resetPassword: async (resetData) => {
     try {
-      // Endpoint needs to be implemented on the backend
       const response = await baseAPI.post('/accounts/reset-password/', resetData);
       return { success: true, data: response.data };
     } catch (error) {
