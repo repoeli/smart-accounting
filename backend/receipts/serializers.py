@@ -1,5 +1,37 @@
 from rest_framework import serializers
-from .models import Receipt, Transaction
+from .models import Receipt, Transaction, BulkUploadJob
+
+class BulkUploadJobSerializer(serializers.ModelSerializer):
+    """
+    Serializer for BulkUploadJob.
+    """
+    progress_percentage = serializers.ReadOnlyField()
+    is_complete = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = BulkUploadJob
+        fields = [
+            'id', 'owner', 'status', 'total_files', 'processed_files',
+            'successful_files', 'failed_files', 'progress_percentage',
+            'is_complete', 'created_at', 'updated_at', 'started_at', 'completed_at'
+        ]
+        read_only_fields = [
+            'id', 'owner', 'status', 'processed_files', 'successful_files',
+            'failed_files', 'created_at', 'updated_at', 'started_at', 'completed_at'
+        ]
+
+
+class BulkUploadSerializer(serializers.Serializer):
+    """
+    Serializer for bulk file uploads.
+    """
+    files = serializers.ListField(
+        child=serializers.FileField(),
+        max_length=50,  # Maximum 50 files per bulk upload
+        min_length=2,   # Minimum 2 files to be considered "bulk"
+        help_text="List of files to upload"
+    )
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     """

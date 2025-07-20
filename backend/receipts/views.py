@@ -13,8 +13,27 @@ import json
 import uuid
 import os
 
-from .models import Receipt, Transaction
-from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .models import Receipt, Transaction, BulkUploadJob
+from .serializers import (ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer, 
+                         BulkUploadJobSerializer, BulkUploadSerializer)
+from .tasks import process_receipt_task
+
+
+class BulkUploadJobViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing bulk upload jobs and their progress.
+    """
+    serializer_class = BulkUploadJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter queryset to return only the current user's bulk upload jobs
+        unless the user is a staff member.
+        """
+        if self.request.user.is_staff:
+            return BulkUploadJob.objects.all()
+        return BulkUploadJob.objects.filter(owner=self.request.user)
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
@@ -35,6 +54,76 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
             return Receipt.objects.all().select_related('transaction')
         return Receipt.objects.filter(owner=self.request.user).select_related('transaction')
     
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    @swagger_auto_schema(
+        operation_summary="Bulk upload multiple receipts",
+        operation_description="Upload multiple receipt files at once (requires subscription with bulk upload enabled)",
+        request_body=BulkUploadSerializer,
+        responses={
+            201: BulkUploadJobSerializer,
+            400: "Invalid input data",
+            403: "Bulk upload not available for your subscription plan"
+        }
+    )
+    def bulk_upload(self, request, *args, **kwargs):
+        """
+        Upload multiple receipts at once and create a BulkUploadJob to track progress.
+        """
+        # Check if user has bulk upload permission
+        user = request.user
+        try:
+            subscription = user.subscription_details
+            if not subscription.has_bulk_upload:
+                return Response(
+                    {"error": "Bulk upload is not available for your subscription plan. Please upgrade to Platinum."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        except:
+            return Response(
+                {"error": "No active subscription found. Bulk upload requires a Platinum subscription."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Validate the upload data
+        serializer = BulkUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        files = serializer.validated_data['files']
+        
+        # Create BulkUploadJob
+        bulk_job = BulkUploadJob.objects.create(
+            owner=user,
+            total_files=len(files),
+            status=BulkUploadJob.PENDING
+        )
+        
+        # Create Receipt objects and queue processing tasks
+        receipt_ids = []
+        for file in files:
+            receipt = Receipt.objects.create(
+                owner=user,
+                file=file,
+                original_filename=file.name,
+                bulk_upload_job=bulk_job,
+                ocr_status=Receipt.PENDING
+            )
+            receipt_ids.append(receipt.id)
+        
+        # Update job status and start time
+        bulk_job.status = BulkUploadJob.PROCESSING
+        bulk_job.started_at = timezone.now()
+        bulk_job.save()
+        
+        # Queue Celery tasks for each receipt
+        for receipt_id in receipt_ids:
+            process_receipt_task.delay(receipt_id, bulk_job.id)
+        
+        # Return the job details
+        return Response(
+            BulkUploadJobSerializer(bulk_job).data,
+            status=status.HTTP_201_CREATED
+        )
+    
     @swagger_auto_schema(
         operation_summary="Upload a receipt for OCR processing",
         operation_description="Upload a receipt image for automatic data extraction",
@@ -46,7 +135,7 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
     )
     async def create(self, request, *args, **kwargs):
         """
-        Asynchronously upload a new receipt and start OCR processing.
+        Upload a new receipt and start OCR processing using Celery.
         """
         # Use sync_to_async for the serializer operations
         @sync_to_async
@@ -65,9 +154,8 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
         # Create the receipt record
         receipt, receipt_data = await validate_and_save()
         
-        # Start async OCR processing
-        # This will run in the background without blocking the response
-        self.process_receipt_async(receipt.id)
+        # Queue Celery task for processing
+        process_receipt_task.delay(receipt.id)
         
         return Response(receipt_data, status=status.HTTP_201_CREATED)
     
@@ -114,7 +202,7 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
     )
     async def reprocess(self, request, pk=None):
         """
-        Asynchronously reprocess a receipt with OCR.
+        Reprocess a receipt with OCR using Celery.
         """
         @sync_to_async
         def get_and_update_for_reprocessing():
@@ -128,124 +216,17 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
         
         success, receipt_id, data = await get_and_update_for_reprocessing()
         if success:
-            # Start async OCR processing
-            self.process_receipt_async(receipt_id)
+            # Queue Celery task for processing
+            process_receipt_task.delay(receipt_id)
             return Response(data)
         return Response(data, status=status.HTTP_404_NOT_FOUND)
     
     async def process_receipt_async(self, receipt_id):
         """
-        Process receipt asynchronously using Veryfi API.
-        This function does not block the response and runs in the background.
+        DEPRECATED: This method is replaced by Celery tasks.
+        Keeping for backward compatibility but redirects to Celery.
         """
-        @sync_to_async
-        def get_receipt_for_processing():
-            try:
-                return Receipt.objects.get(id=receipt_id), True
-            except Receipt.DoesNotExist:
-                return None, False
-                
-        @sync_to_async
-        def update_receipt_status(receipt, status, **kwargs):
-            receipt.ocr_status = status
-            for key, value in kwargs.items():
-                setattr(receipt, key, value)
-            receipt.save()
-            
-        @sync_to_async
-        def create_transaction_from_veryfi_data(receipt, veryfi_data):
-            # Extract transaction data from Veryfi response
-            try:
-                # Create or update transaction
-                transaction_data = {
-                    'receipt': receipt,
-                    'owner': receipt.owner,
-                    'vendor_name': veryfi_data.get('vendor', {}).get('name', ''),
-                    'transaction_date': veryfi_data.get('date', timezone.now().date()),
-                    'total_amount': veryfi_data.get('total', 0),
-                    'currency': veryfi_data.get('currency_code', 'GBP'),
-                    'vat_amount': veryfi_data.get('tax', 0),
-                    'is_vat_registered': bool(veryfi_data.get('vendor', {}).get('vat_number')),
-                    'category': map_veryfi_category_to_internal(veryfi_data.get('category')),
-                    'line_items': veryfi_data.get('line_items', []),
-                }
-                
-                # Create or update transaction
-                Transaction.objects.update_or_create(
-                    receipt=receipt,
-                    defaults=transaction_data
-                )
-                return True
-            except Exception as e:
-                print(f"Error creating transaction: {str(e)}")
-                return False
-        
-        # Get the receipt
-        receipt, exists = await get_receipt_for_processing()
-        if not exists:
-            return
-            
-        # Update status to processing
-        await update_receipt_status(receipt, Receipt.PROCESSING)
-        
-        try:
-            # Get the file path
-            file_path = receipt.file.path
-            
-            # Process with Veryfi API asynchronously
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # First, prepare for file upload
-                headers = {
-                    "CLIENT-ID": settings.VERYFI_CLIENT_ID,
-                    "AUTHORIZATION": f"apikey {settings.VERYFI_USERNAME}:{settings.VERYFI_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                
-                # Read file as binary and prepare for sending
-                with open(file_path, 'rb') as f:
-                    file_data = f.read()
-                
-                # Get filename from path
-                filename = os.path.basename(file_path)
-                
-                # Create request data
-                request_data = {
-                    "file_name": filename,
-                    "file_data": httpx._utils.encode_bytes(file_data),  # Base64 encode
-                    "categories": ["Expense", "Meals", "Travel"],
-                    "auto_delete": False,
-                    "boost_mode": 1,  # Enable boost mode for faster processing
-                }
-                
-                # Send to Veryfi API
-                response = await client.post(
-                    f"{settings.VERYFI_ENVIRONMENT_URL}/api/v8/partner/documents/",
-                    headers=headers,
-                    json=request_data
-                )
-                
-                if response.status_code == 200:
-                    veryfi_data = response.json()
-                    
-                    # Update receipt with OCR results
-                    await update_receipt_status(
-                        receipt, 
-                        Receipt.COMPLETED,
-                        veryfi_response_data=veryfi_data,
-                        veryfi_document_id=veryfi_data.get('id'),
-                        ocr_confidence=veryfi_data.get('ocr_confidence', 0) * 100,  # Convert 0-1 to 0-100
-                        is_auto_approved=veryfi_data.get('ocr_confidence', 0) >= 0.85  # Auto-approve if confidence > 85%
-                    )
-                    
-                    # Create transaction from the data
-                    await create_transaction_from_veryfi_data(receipt, veryfi_data)
-                else:
-                    # Handle error
-                    await update_receipt_status(receipt, Receipt.FAILED)
-        except Exception as e:
-            # Update status to failed on exception
-            await update_receipt_status(receipt, Receipt.FAILED)
-            print(f"Error processing receipt: {str(e)}")
+        process_receipt_task.delay(receipt_id)
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -263,25 +244,3 @@ class TransactionViewSet(viewsets.ModelViewSet):
         if self.request.user.is_staff:
             return Transaction.objects.all()
         return Transaction.objects.filter(owner=self.request.user)
-
-
-def map_veryfi_category_to_internal(veryfi_category):
-    """
-    Map Veryfi categories to our internal categories.
-    """
-    mapping = {
-        'Meals & Entertainment': Transaction.MEALS,
-        'Travel': Transaction.TRAVEL,
-        'Supplies & Materials': Transaction.OFFICE_SUPPLIES,
-        'Utilities': Transaction.UTILITIES,
-        'Software': Transaction.SOFTWARE,
-        'Equipment': Transaction.HARDWARE,
-        'Professional Services': Transaction.PROFESSIONAL_SERVICES,
-        'Advertising': Transaction.MARKETING,
-        'Rent or Lease': Transaction.RENT,
-    }
-    
-    if not veryfi_category:
-        return Transaction.OTHER
-        
-    return mapping.get(veryfi_category, Transaction.OTHER)

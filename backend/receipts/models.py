@@ -1,6 +1,88 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
+from django.utils import timezone
+
+
+class BulkUploadJob(models.Model):
+    """
+    Model to track bulk upload jobs and their progress.
+    """
+    # Owner relationship
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='bulk_upload_jobs'
+    )
+    
+    # Job status
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (PROCESSING, 'Processing'),
+        (COMPLETED, 'Completed'),
+        (FAILED, 'Failed'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=PENDING
+    )
+    
+    # Progress tracking
+    total_files = models.PositiveIntegerField(default=0)
+    processed_files = models.PositiveIntegerField(default=0)
+    successful_files = models.PositiveIntegerField(default=0)
+    failed_files = models.PositiveIntegerField(default=0)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Bulk Upload {self.id} - {self.owner.email} ({self.status})"
+    
+    @property
+    def progress_percentage(self):
+        """Calculate progress percentage"""
+        if self.total_files == 0:
+            return 0
+        return int((self.processed_files / self.total_files) * 100)
+    
+    @property
+    def is_complete(self):
+        """Check if the job is complete"""
+        return self.status in [self.COMPLETED, self.FAILED]
+    
+    def update_progress(self, success=True):
+        """Update progress counters"""
+        self.processed_files += 1
+        if success:
+            self.successful_files += 1
+        else:
+            self.failed_files += 1
+        
+        # Update status if all files are processed
+        if self.processed_files >= self.total_files:
+            if self.failed_files == 0:
+                self.status = self.COMPLETED
+            elif self.successful_files == 0:
+                self.status = self.FAILED
+            else:
+                self.status = self.COMPLETED  # Partial success still considered completed
+            
+            self.completed_at = timezone.now()
+        
+        self.save()
+
 
 class Receipt(models.Model):
     """
@@ -11,6 +93,16 @@ class Receipt(models.Model):
         settings.AUTH_USER_MODEL, 
         on_delete=models.CASCADE, 
         related_name='receipts'
+    )
+    
+    # Bulk upload job relationship (optional)
+    bulk_upload_job = models.ForeignKey(
+        BulkUploadJob,
+        on_delete=models.CASCADE,
+        related_name='receipts',
+        null=True,
+        blank=True,
+        help_text="Link to bulk upload job if this receipt was uploaded as part of a bulk operation"
     )
     
     # Upload information
