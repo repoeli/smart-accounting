@@ -5,22 +5,19 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.conf import settings
 from django.utils import timezone
-from asgiref.sync import sync_to_async
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-import httpx
 import json
-import uuid
-import os
 
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .tasks import process_document_ocr
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for viewing and uploading receipts.
-    Implements asynchronous processing for OCR via Veryfi API.
+    ViewSet for viewing and uploading receipts/documents.
+    Implements background task processing for OCR via Celery and Tesseract.
     """
     serializer_class = ReceiptSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -36,40 +33,54 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
         return Receipt.objects.filter(owner=self.request.user).select_related('transaction')
     
     @swagger_auto_schema(
-        operation_summary="Upload a receipt for OCR processing",
-        operation_description="Upload a receipt image for automatic data extraction",
+        operation_summary="Upload a document for OCR processing",
+        operation_description="Upload a document (receipt/invoice) for automatic data extraction using Tesseract OCR",
         request_body=ReceiptUploadSerializer,
         responses={
             201: ReceiptSerializer,
             400: "Invalid input data"
         }
     )
-    async def create(self, request, *args, **kwargs):
+    def create(self, request, *args, **kwargs):
         """
-        Asynchronously upload a new receipt and start OCR processing.
+        Upload a new document and queue it for background OCR processing.
+        Returns immediate feedback that the upload was successful and is being processed.
         """
-        # Use sync_to_async for the serializer operations
-        @sync_to_async
-        def validate_and_save():
-            serializer = ReceiptUploadSerializer(
-                data=request.data, 
-                context={'request': request}
-            )
-            serializer.is_valid(raise_exception=True)
-            receipt = serializer.save(
-                owner=request.user,
-                ocr_status=Receipt.PENDING
-            )
-            return receipt, ReceiptSerializer(receipt).data
+        serializer = ReceiptUploadSerializer(
+            data=request.data, 
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
         
-        # Create the receipt record
-        receipt, receipt_data = await validate_and_save()
+        # Extract assigned_client if provided (for accounting firms)
+        assigned_client_id = request.data.get('assigned_client')
+        assigned_client = None
         
-        # Start async OCR processing
-        # This will run in the background without blocking the response
-        self.process_receipt_async(receipt.id)
+        if assigned_client_id and request.user.user_type == 'accounting_firm':
+            from accounts.models import Account
+            try:
+                assigned_client = Account.objects.get(id=assigned_client_id)
+            except Account.DoesNotExist:
+                return Response(
+                    {"error": "Invalid assigned_client ID"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
-        return Response(receipt_data, status=status.HTTP_201_CREATED)
+        # Create the receipt record with pending status
+        receipt = serializer.save(
+            owner=request.user,
+            assigned_client=assigned_client,
+            ocr_status=Receipt.PENDING
+        )
+        
+        # Queue the OCR processing task
+        process_document_ocr.delay(receipt.id)
+        
+        # Return immediate response
+        response_data = ReceiptSerializer(receipt).data
+        response_data['message'] = "Document uploaded successfully and is being processed"
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['post'])
     @swagger_auto_schema(
@@ -81,26 +92,22 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
             404: "Receipt not found"
         }
     )
-    async def verify(self, request, pk=None):
+    def verify(self, request, pk=None):
         """
-        Asynchronously mark a receipt as manually verified.
+        Mark a receipt as manually verified.
         """
-        @sync_to_async
-        def get_and_update_receipt():
-            try:
-                receipt = self.get_queryset().get(pk=pk)
-                receipt.is_manually_verified = True
-                receipt.verified_by = request.user
-                receipt.verified_at = timezone.now()
-                receipt.save()
-                return True, ReceiptSerializer(receipt).data
-            except Receipt.DoesNotExist:
-                return False, {"error": "Receipt not found"}
-        
-        success, data = await get_and_update_receipt()
-        if success:
-            return Response(data)
-        return Response(data, status=status.HTTP_404_NOT_FOUND)
+        try:
+            receipt = self.get_queryset().get(pk=pk)
+            receipt.is_manually_verified = True
+            receipt.verified_by = request.user
+            receipt.verified_at = timezone.now()
+            receipt.save()
+            return Response(ReceiptSerializer(receipt).data)
+        except Receipt.DoesNotExist:
+            return Response(
+                {"error": "Receipt not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
     
     @action(detail=True, methods=['post'])
     @swagger_auto_schema(
@@ -112,141 +119,27 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
             404: "Receipt not found"
         }
     )
-    async def reprocess(self, request, pk=None):
+    def reprocess(self, request, pk=None):
         """
-        Asynchronously reprocess a receipt with OCR.
+        Reprocess a receipt with OCR using Celery task.
         """
-        @sync_to_async
-        def get_and_update_for_reprocessing():
-            try:
-                receipt = self.get_queryset().get(pk=pk)
-                receipt.ocr_status = Receipt.PENDING
-                receipt.save()
-                return True, receipt.id, ReceiptSerializer(receipt).data
-            except Receipt.DoesNotExist:
-                return False, None, {"error": "Receipt not found"}
-        
-        success, receipt_id, data = await get_and_update_for_reprocessing()
-        if success:
-            # Start async OCR processing
-            self.process_receipt_async(receipt_id)
-            return Response(data)
-        return Response(data, status=status.HTTP_404_NOT_FOUND)
-    
-    async def process_receipt_async(self, receipt_id):
-        """
-        Process receipt asynchronously using Veryfi API.
-        This function does not block the response and runs in the background.
-        """
-        @sync_to_async
-        def get_receipt_for_processing():
-            try:
-                return Receipt.objects.get(id=receipt_id), True
-            except Receipt.DoesNotExist:
-                return None, False
-                
-        @sync_to_async
-        def update_receipt_status(receipt, status, **kwargs):
-            receipt.ocr_status = status
-            for key, value in kwargs.items():
-                setattr(receipt, key, value)
+        try:
+            receipt = self.get_queryset().get(pk=pk)
+            receipt.ocr_status = Receipt.PENDING
             receipt.save()
             
-        @sync_to_async
-        def create_transaction_from_veryfi_data(receipt, veryfi_data):
-            # Extract transaction data from Veryfi response
-            try:
-                # Create or update transaction
-                transaction_data = {
-                    'receipt': receipt,
-                    'owner': receipt.owner,
-                    'vendor_name': veryfi_data.get('vendor', {}).get('name', ''),
-                    'transaction_date': veryfi_data.get('date', timezone.now().date()),
-                    'total_amount': veryfi_data.get('total', 0),
-                    'currency': veryfi_data.get('currency_code', 'GBP'),
-                    'vat_amount': veryfi_data.get('tax', 0),
-                    'is_vat_registered': bool(veryfi_data.get('vendor', {}).get('vat_number')),
-                    'category': map_veryfi_category_to_internal(veryfi_data.get('category')),
-                    'line_items': veryfi_data.get('line_items', []),
-                }
-                
-                # Create or update transaction
-                Transaction.objects.update_or_create(
-                    receipt=receipt,
-                    defaults=transaction_data
-                )
-                return True
-            except Exception as e:
-                print(f"Error creating transaction: {str(e)}")
-                return False
-        
-        # Get the receipt
-        receipt, exists = await get_receipt_for_processing()
-        if not exists:
-            return
+            # Queue the OCR processing task
+            process_document_ocr.delay(receipt.id)
             
-        # Update status to processing
-        await update_receipt_status(receipt, Receipt.PROCESSING)
-        
-        try:
-            # Get the file path
-            file_path = receipt.file.path
+            response_data = ReceiptSerializer(receipt).data
+            response_data['message'] = "Document queued for reprocessing"
+            return Response(response_data)
             
-            # Process with Veryfi API asynchronously
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # First, prepare for file upload
-                headers = {
-                    "CLIENT-ID": settings.VERYFI_CLIENT_ID,
-                    "AUTHORIZATION": f"apikey {settings.VERYFI_USERNAME}:{settings.VERYFI_API_KEY}",
-                    "Content-Type": "application/json"
-                }
-                
-                # Read file as binary and prepare for sending
-                with open(file_path, 'rb') as f:
-                    file_data = f.read()
-                
-                # Get filename from path
-                filename = os.path.basename(file_path)
-                
-                # Create request data
-                request_data = {
-                    "file_name": filename,
-                    "file_data": httpx._utils.encode_bytes(file_data),  # Base64 encode
-                    "categories": ["Expense", "Meals", "Travel"],
-                    "auto_delete": False,
-                    "boost_mode": 1,  # Enable boost mode for faster processing
-                }
-                
-                # Send to Veryfi API
-                response = await client.post(
-                    f"{settings.VERYFI_ENVIRONMENT_URL}/api/v8/partner/documents/",
-                    headers=headers,
-                    json=request_data
-                )
-                
-                if response.status_code == 200:
-                    veryfi_data = response.json()
-                    
-                    # Update receipt with OCR results
-                    await update_receipt_status(
-                        receipt, 
-                        Receipt.COMPLETED,
-                        veryfi_response_data=veryfi_data,
-                        veryfi_document_id=veryfi_data.get('id'),
-                        ocr_confidence=veryfi_data.get('ocr_confidence', 0) * 100,  # Convert 0-1 to 0-100
-                        is_auto_approved=veryfi_data.get('ocr_confidence', 0) >= 0.85  # Auto-approve if confidence > 85%
-                    )
-                    
-                    # Create transaction from the data
-                    await create_transaction_from_veryfi_data(receipt, veryfi_data)
-                else:
-                    # Handle error
-                    await update_receipt_status(receipt, Receipt.FAILED)
-        except Exception as e:
-            # Update status to failed on exception
-            await update_receipt_status(receipt, Receipt.FAILED)
-            print(f"Error processing receipt: {str(e)}")
-
+        except Receipt.DoesNotExist:
+            return Response(
+                {"error": "Receipt not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 class TransactionViewSet(viewsets.ModelViewSet):
     """
@@ -263,25 +156,3 @@ class TransactionViewSet(viewsets.ModelViewSet):
         if self.request.user.is_staff:
             return Transaction.objects.all()
         return Transaction.objects.filter(owner=self.request.user)
-
-
-def map_veryfi_category_to_internal(veryfi_category):
-    """
-    Map Veryfi categories to our internal categories.
-    """
-    mapping = {
-        'Meals & Entertainment': Transaction.MEALS,
-        'Travel': Transaction.TRAVEL,
-        'Supplies & Materials': Transaction.OFFICE_SUPPLIES,
-        'Utilities': Transaction.UTILITIES,
-        'Software': Transaction.SOFTWARE,
-        'Equipment': Transaction.HARDWARE,
-        'Professional Services': Transaction.PROFESSIONAL_SERVICES,
-        'Advertising': Transaction.MARKETING,
-        'Rent or Lease': Transaction.RENT,
-    }
-    
-    if not veryfi_category:
-        return Transaction.OTHER
-        
-    return mapping.get(veryfi_category, Transaction.OTHER)

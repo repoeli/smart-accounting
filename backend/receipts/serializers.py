@@ -28,14 +28,14 @@ class ReceiptSerializer(serializers.ModelSerializer):
     class Meta:
         model = Receipt
         fields = [
-            'id', 'owner', 'file', 'original_filename', 'uploaded_at',
-            'ocr_status', 'ocr_confidence', 'is_auto_approved', 'is_manually_verified',
-            'verified_by', 'verified_at', 'veryfi_document_id', 'receipt_date',
-            'total_amount', 'transaction', 'created_at', 'updated_at'
+            'id', 'owner', 'assigned_client', 'file', 'original_filename', 'uploaded_at',
+            'ocr_status', 'ocr_text', 'extracted_data', 'ocr_confidence', 'is_auto_approved', 
+            'is_manually_verified', 'verified_by', 'verified_at', 'veryfi_document_id', 
+            'receipt_date', 'total_amount', 'transaction', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'owner', 'original_filename', 'uploaded_at', 'ocr_status', 
-            'ocr_confidence', 'is_auto_approved', 'is_manually_verified',
+            'id', 'owner', 'original_filename', 'uploaded_at', 'ocr_status', 'ocr_text',
+            'extracted_data', 'ocr_confidence', 'is_auto_approved', 'is_manually_verified',
             'verified_by', 'verified_at', 'veryfi_document_id', 'created_at', 'updated_at'
         ]
     
@@ -55,11 +55,16 @@ class ReceiptUploadSerializer(serializers.ModelSerializer):
     """
     Simplified serializer for Receipt uploads only.
     """
+    assigned_client = serializers.IntegerField(required=False, write_only=True)
+    
     class Meta:
         model = Receipt
-        fields = ['file']
+        fields = ['file', 'assigned_client']
 
     def create(self, validated_data):
+        # Remove assigned_client from validated_data as it's handled in the view
+        validated_data.pop('assigned_client', None)
+        
         # Set the owner to the current user
         validated_data['owner'] = self.context['request'].user
         
