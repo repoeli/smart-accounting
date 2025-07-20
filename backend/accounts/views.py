@@ -12,8 +12,8 @@ from django.core.mail import EmailMessage
 import jwt
 from datetime import datetime, timedelta
 import uuid
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+# from drf_yasg.utils import swagger_auto_schema
+# from drf_yasg import openapi
 
 from .models import Account
 from .serializers import (
@@ -29,23 +29,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     """
     Takes a set of user credentials and returns access and refresh JWT tokens.
     """
-    @swagger_auto_schema(
-        operation_summary="Obtain JWT token pair",
-        operation_description="Exchange username and password for access and refresh tokens",
-        responses={
-            200: openapi.Response(
-                description="Token pair obtained successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'access': openapi.Schema(type=openapi.TYPE_STRING),
-                        'refresh': openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
-            ),
-            401: "Authentication failed"
-        }
-    )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
@@ -57,17 +40,6 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     
-    @swagger_auto_schema(
-        operation_summary="Register a new user",
-        operation_description="Create a new user account and send verification email",
-        responses={
-            201: openapi.Response(
-                description="User created successfully, verification email sent",
-                schema=RegisterSerializer
-            ),
-            400: "Invalid input data"
-        }
-    )
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -137,15 +109,6 @@ class VerifyEmailView(APIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = EmailVerificationSerializer
     
-    @swagger_auto_schema(
-        operation_summary="Verify email address",
-        operation_description="Verify email address using token sent in email",
-        request_body=EmailVerificationSerializer,
-        responses={
-            200: "Email verified successfully",
-            400: "Invalid token"
-        }
-    )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -205,14 +168,6 @@ class AccountViewSet(viewsets.ModelViewSet):
             return Account.objects.all()
         return Account.objects.filter(id=self.request.user.id)
     
-    @swagger_auto_schema(
-        operation_summary="Get current user profile",
-        operation_description="Retrieve the profile of the currently authenticated user",
-        responses={
-            200: AccountSerializer,
-            401: "Not authenticated"
-        }
-    )
     @action(detail=False, methods=['get'])
     def me(self, request):
         """
@@ -221,15 +176,6 @@ class AccountViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
     
-    @swagger_auto_schema(
-        operation_summary="Change password",
-        operation_description="Change the password for the current user",
-        request_body=ChangePasswordSerializer,
-        responses={
-            200: "Password changed successfully",
-            400: "Invalid input data"
-        }
-    )
     @action(detail=False, methods=['post'])
     def change_password(self, request):
         """
@@ -257,14 +203,6 @@ class AccountViewSet(viewsets.ModelViewSet):
             
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-    @swagger_auto_schema(
-        operation_summary="Deactivate account",
-        operation_description="Deactivate the current user's account",
-        responses={
-            200: "Account deactivated successfully",
-            403: "Permission denied"
-        }
-    )
     @action(detail=False, methods=['post'])
     def deactivate(self, request):
         """
