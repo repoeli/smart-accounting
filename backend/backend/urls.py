@@ -43,6 +43,7 @@ urlpatterns = [
     
     # API endpoints
     path("api/v1/accounts/", include("accounts.urls")),
+    path("api/v1/clients/", include("clients.urls")),
     path("api/v1/receipts/", include("receipts.urls")),
     path("api/v1/subscriptions/", include("subscriptions.urls")),
     
