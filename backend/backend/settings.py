@@ -54,8 +54,14 @@ INSTALLED_APPS = [
     
     # Project apps
     "accounts",
-    "receipts",
+    "clients", 
+    "documents",
+    "transactions",
+    "receipts",  # Keep for backward compatibility during transition
     "subscriptions",
+    "reports",
+    "notifications",
+    "api",
 ]
 
 MIDDLEWARE = [
