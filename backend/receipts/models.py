@@ -1,10 +1,12 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
+from .validators import validate_document_file
 
 class Receipt(models.Model):
     """
-    Model to store uploaded receipt images and the OCR processing data from Veryfi.
+    Model to store uploaded document images and the OCR processing data.
+    This serves as the Document model mentioned in the user story.
     """
     # Owner relationship
     owner = models.ForeignKey(
@@ -13,8 +15,22 @@ class Receipt(models.Model):
         related_name='receipts'
     )
     
-    # Upload information
-    file = models.FileField(upload_to='receipts/')
+    # Client assignment for accounting firms
+    assigned_client = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assigned_documents',
+        null=True,
+        blank=True,
+        help_text="Client this document is assigned to (for accounting firm users)"
+    )
+    
+    # Upload information with validation
+    file = models.FileField(
+        upload_to='receipts/', 
+        validators=[validate_document_file],
+        help_text="Accepted formats: JPEG, PNG, PDF, HEIC. Maximum size: 10MB."
+    )
     original_filename = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     
@@ -33,6 +49,18 @@ class Receipt(models.Model):
         max_length=20,
         choices=OCR_STATUS_CHOICES,
         default=PENDING
+    )
+    
+    # OCR results from Tesseract
+    ocr_text = models.TextField(
+        blank=True, 
+        null=True, 
+        help_text="Raw OCR text extracted from the document"
+    )
+    extracted_data = models.JSONField(
+        blank=True, 
+        null=True, 
+        help_text="Structured data extracted from OCR text"
     )
     
     # OCR confidence and verification
