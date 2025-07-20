@@ -1,12 +1,13 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-from .views import AsyncReceiptViewSet, TransactionViewSet
+from .views import AsyncReceiptViewSet, TransactionViewSet, BulkUploadJobViewSet
 
 # Create a router for ViewSets
 router = DefaultRouter()
 router.register(r'receipts', AsyncReceiptViewSet, basename='receipt')
 router.register(r'transactions', TransactionViewSet, basename='transaction')
+router.register(r'bulk-upload-jobs', BulkUploadJobViewSet, basename='bulk-upload-job')
 
 # URL patterns for the receipts app
 urlpatterns = [
