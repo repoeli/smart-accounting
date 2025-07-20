@@ -19,6 +19,10 @@ import EmailVerificationSentPage from './pages/auth/EmailVerificationSentPage';
 import PasswordResetSentPage from './pages/auth/PasswordResetSentPage';
 import ChangePasswordPage from './pages/auth/ChangePasswordPage';
 
+// Subscription Pages
+import PricingPage from './pages/PricingPage';
+import SubscriptionSuccessPage from './pages/SubscriptionSuccessPage';
+
 // Create theme
 const theme = createTheme({
   palette: {
@@ -56,9 +60,13 @@ function App() {
             <Route path="/verify-email-sent" element={<EmailVerificationSentPage />} />
             <Route path="/reset-password-sent" element={<PasswordResetSentPage />} />
             
+            {/* Subscription Routes - can be accessed by both authenticated and unauthenticated users */}
+            <Route path="/pricing" element={<PricingPage />} />
+            
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
               <Route path="/change-password" element={<ChangePasswordPage />} />
+              <Route path="/subscription/success" element={<SubscriptionSuccessPage />} />
               {/* Add other protected routes here */}
               <Route path="/dashboard" element={<div>Dashboard (to be implemented)</div>} />
               <Route path="/profile" element={<div>Profile (to be implemented)</div>} />
@@ -73,5 +81,7 @@ function App() {
     </ThemeProvider>
   );
 }
+
+export default App;
 
 export default App;
