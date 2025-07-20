@@ -5,14 +5,19 @@ class TransactionSerializer(serializers.ModelSerializer):
     """
     Serializer for Transaction data extracted from receipts.
     """
+    requires_review = serializers.ReadOnlyField()
+    review_status = serializers.ReadOnlyField()
+    
     class Meta:
         model = Transaction
         fields = [
             'id', 'receipt', 'vendor_name', 'transaction_date', 'total_amount',
             'currency', 'vat_amount', 'is_vat_registered', 'category',
-            'is_tax_deductible', 'notes', 'line_items', 'created_at', 'updated_at'
+            'is_tax_deductible', 'notes', 'line_items', 'is_verified', 
+            'verified_by', 'verified_at', 'requires_review', 'review_status',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'receipt', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'receipt', 'verified_by', 'verified_at', 'created_at', 'updated_at']
 
 
 class ReceiptSerializer(serializers.ModelSerializer):

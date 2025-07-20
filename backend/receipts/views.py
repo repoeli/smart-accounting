@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.conf import settings
 from django.utils import timezone
+from django.db import models
 from asgiref.sync import sync_to_async
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -251,6 +252,7 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
 class TransactionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for viewing and editing transactions.
+    Supports filtering for unverified transactions and manual verification.
     """
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -259,10 +261,134 @@ class TransactionViewSet(viewsets.ModelViewSet):
         """
         Filter queryset to return only the current user's transactions
         unless the user is a staff member.
+        Supports filtering by verification status.
         """
         if self.request.user.is_staff:
-            return Transaction.objects.all()
-        return Transaction.objects.filter(owner=self.request.user)
+            queryset = Transaction.objects.all()
+        else:
+            queryset = Transaction.objects.filter(owner=self.request.user)
+        
+        # Add filtering based on query parameters
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter == 'unverified':
+            queryset = queryset.filter(is_verified=False)
+        elif status_filter == 'verified':
+            queryset = queryset.filter(is_verified=True)
+        elif status_filter == 'needs_review':
+            # Filter for transactions that need review (low confidence or missing data)
+            queryset = queryset.filter(
+                models.Q(is_verified=False) & 
+                (models.Q(receipt__ocr_confidence__lt=85) | 
+                 models.Q(vendor_name__isnull=True) | 
+                 models.Q(vendor_name='') |
+                 models.Q(total_amount__isnull=True) |
+                 models.Q(total_amount__lte=0))
+            )
+        
+        # Filter by date range
+        date_from = self.request.query_params.get('date_from', None)
+        date_to = self.request.query_params.get('date_to', None)
+        if date_from:
+            queryset = queryset.filter(transaction_date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(transaction_date__lte=date_to)
+            
+        # Filter by vendor
+        vendor = self.request.query_params.get('vendor', None)
+        if vendor:
+            queryset = queryset.filter(vendor_name__icontains=vendor)
+            
+        return queryset.select_related('receipt', 'verified_by')
+    
+    @action(detail=True, methods=['post'])
+    @swagger_auto_schema(
+        operation_summary="Verify a transaction manually",
+        operation_description="Mark a transaction as manually verified by the current user",
+        responses={
+            200: TransactionSerializer,
+            400: "Invalid operation",
+            404: "Transaction not found"
+        }
+    )
+    def verify(self, request, pk=None):
+        """
+        Mark a transaction as manually verified.
+        """
+        transaction = self.get_object()
+        transaction.is_verified = True
+        transaction.verified_by = request.user
+        transaction.verified_at = timezone.now()
+        transaction.save()
+        
+        serializer = self.get_serializer(transaction)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post']) 
+    @swagger_auto_schema(
+        operation_summary="Unverify a transaction",
+        operation_description="Remove verification status from a transaction",
+        responses={
+            200: TransactionSerializer,
+            400: "Invalid operation", 
+            404: "Transaction not found"
+        }
+    )
+    def unverify(self, request, pk=None):
+        """
+        Remove verification status from a transaction.
+        """
+        transaction = self.get_object()
+        transaction.is_verified = False
+        transaction.verified_by = None
+        transaction.verified_at = None
+        transaction.save()
+        
+        serializer = self.get_serializer(transaction)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    @swagger_auto_schema(
+        operation_summary="Get transaction statistics",
+        operation_description="Get counts of verified, unverified, and needs review transactions",
+        responses={
+            200: openapi.Response(
+                description="Transaction statistics",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'verified': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'unverified': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'needs_review': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    }
+                )
+            )
+        }
+    )
+    def stats(self, request):
+        """
+        Get transaction statistics for the current user.
+        """
+        queryset = self.get_queryset()
+        
+        total = queryset.count()
+        verified = queryset.filter(is_verified=True).count()
+        unverified = queryset.filter(is_verified=False).count()
+        needs_review = queryset.filter(
+            models.Q(is_verified=False) & 
+            (models.Q(receipt__ocr_confidence__lt=85) | 
+             models.Q(vendor_name__isnull=True) | 
+             models.Q(vendor_name='') |
+             models.Q(total_amount__isnull=True) |
+             models.Q(total_amount__lte=0))
+        ).count()
+        
+        return Response({
+            'total': total,
+            'verified': verified,
+            'unverified': unverified,
+            'needs_review': needs_review
+        })
 
 
 def map_veryfi_category_to_internal(veryfi_category):
