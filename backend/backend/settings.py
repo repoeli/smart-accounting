@@ -51,9 +51,11 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_yasg",
     "rest_framework_simplejwt",
+    "django_filters",
     
     # Project apps
     "accounts",
+    "clients",
     "receipts",
     "subscriptions",
 ]
