@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     libjpeg-dev \
     zlib1g-dev \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy and install requirements
@@ -30,5 +31,5 @@ RUN mkdir -p /app/staticfiles /app/media
 # Expose port
 EXPOSE 8000
 
-# Run server using uvicorn instead of gunicorn for ASGI support
-CMD ["uvicorn", "backend.asgi:application", "--host", "0.0.0.0", "--port", "8000"]
+# Run server
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

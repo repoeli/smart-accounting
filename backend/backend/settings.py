@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     
     # Project apps
+    "core",
     "accounts",
     "receipts",
     "subscriptions",
