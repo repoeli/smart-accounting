@@ -13,8 +13,8 @@ import json
 import uuid
 import os
 
-from .models import Receipt, Transaction
-from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .models import Receipt, Transaction, Category
+from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer, CategorySerializer
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
@@ -157,6 +157,8 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
             # Extract transaction data from Veryfi response
             try:
                 # Create or update transaction
+                # For now, we'll handle category assignment separately since we're using custom categories
+                # TODO: Implement intelligent category mapping based on vendor/description
                 transaction_data = {
                     'receipt': receipt,
                     'owner': receipt.owner,
@@ -166,7 +168,7 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
                     'currency': veryfi_data.get('currency_code', 'GBP'),
                     'vat_amount': veryfi_data.get('tax', 0),
                     'is_vat_registered': bool(veryfi_data.get('vendor', {}).get('vat_number')),
-                    'category': map_veryfi_category_to_internal(veryfi_data.get('category')),
+                    # category will need to be assigned manually or via intelligent mapping
                     'line_items': veryfi_data.get('line_items', []),
                 }
                 
@@ -248,6 +250,85 @@ class AsyncReceiptViewSet(viewsets.ModelViewSet):
             print(f"Error processing receipt: {str(e)}")
 
 
+class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing custom income and expense categories.
+    """
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter queryset to return only the current user's categories.
+        """
+        return Category.objects.filter(user=self.request.user)
+    
+    @swagger_auto_schema(
+        operation_summary="List user's categories",
+        operation_description="Get all categories for the authenticated user",
+        responses={200: CategorySerializer(many=True)}
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Create a new category",
+        operation_description="Create a new income or expense category",
+        request_body=CategorySerializer,
+        responses={
+            201: CategorySerializer,
+            400: "Invalid input data"
+        }
+    )
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Get category details",
+        operation_description="Retrieve details of a specific category",
+        responses={
+            200: CategorySerializer,
+            404: "Category not found"
+        }
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Update a category",
+        operation_description="Update an existing category",
+        request_body=CategorySerializer,
+        responses={
+            200: CategorySerializer,
+            400: "Invalid input data",
+            404: "Category not found"
+        }
+    )
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+    
+    @swagger_auto_schema(
+        operation_summary="Delete a category",
+        operation_description="Delete a category (only if no transactions are using it)",
+        responses={
+            204: "Category deleted successfully",
+            400: "Cannot delete category with associated transactions",
+            404: "Category not found"
+        }
+    )
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        
+        # Check if any transactions are using this category
+        if category.transactions.exists():
+            return Response(
+                {"error": "Cannot delete category that has associated transactions. Please reassign transactions first."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return super().destroy(request, *args, **kwargs)
+
+
 class TransactionViewSet(viewsets.ModelViewSet):
     """
     ViewSet for viewing and editing transactions.
@@ -265,23 +346,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
         return Transaction.objects.filter(owner=self.request.user)
 
 
-def map_veryfi_category_to_internal(veryfi_category):
-    """
-    Map Veryfi categories to our internal categories.
-    """
-    mapping = {
-        'Meals & Entertainment': Transaction.MEALS,
-        'Travel': Transaction.TRAVEL,
-        'Supplies & Materials': Transaction.OFFICE_SUPPLIES,
-        'Utilities': Transaction.UTILITIES,
-        'Software': Transaction.SOFTWARE,
-        'Equipment': Transaction.HARDWARE,
-        'Professional Services': Transaction.PROFESSIONAL_SERVICES,
-        'Advertising': Transaction.MARKETING,
-        'Rent or Lease': Transaction.RENT,
-    }
-    
-    if not veryfi_category:
-        return Transaction.OTHER
-        
-    return mapping.get(veryfi_category, Transaction.OTHER)
+# def map_veryfi_category_to_internal(veryfi_category):
+#     """
+#     Map Veryfi categories to our internal categories.
+#     NOTE: This function is no longer used since we moved to custom user categories.
+#     TODO: Implement intelligent category suggestion based on OCR data and user's existing categories.
+#     """
+#     pass

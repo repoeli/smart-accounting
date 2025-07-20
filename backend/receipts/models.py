@@ -2,6 +2,56 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 
+
+class Category(models.Model):
+    """
+    Model to store custom income and expense categories for users.
+    Allows users to create their own categories for meaningful financial reporting.
+    """
+    # Category types
+    INCOME = 'income'
+    EXPENSE = 'expense'
+    CATEGORY_TYPE_CHOICES = [
+        (INCOME, 'Income'),
+        (EXPENSE, 'Expense'),
+    ]
+    
+    # Basic fields
+    name = models.CharField(max_length=100, help_text="Category name (e.g., 'Office Supplies', 'Client Consulting')")
+    type = models.CharField(
+        max_length=10, 
+        choices=CATEGORY_TYPE_CHOICES, 
+        help_text="Whether this is an income or expense category"
+    )
+    description = models.TextField(blank=True, null=True, help_text="Optional description of the category")
+    
+    # User relationship
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        related_name='categories',
+        help_text="User who owns this category"
+    )
+    
+    # System flags
+    is_default = models.BooleanField(
+        default=False, 
+        help_text="System-created default category"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['type', 'name']
+        unique_together = ['user', 'name', 'type']  # Prevent duplicate category names per user per type
+        verbose_name_plural = 'Categories'
+    
+    def __str__(self):
+        return f"{self.get_type_display()}: {self.name}"
+
+
 class Receipt(models.Model):
     """
     Model to store uploaded receipt images and the OCR processing data from Veryfi.
@@ -117,35 +167,12 @@ class Transaction(models.Model):
     vat_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_vat_registered = models.BooleanField(default=False)
     
-    # Categories
-    OFFICE_SUPPLIES = 'office_supplies'
-    TRAVEL = 'travel'
-    MEALS = 'meals'
-    UTILITIES = 'utilities'
-    RENT = 'rent'
-    SOFTWARE = 'software'
-    HARDWARE = 'hardware'
-    PROFESSIONAL_SERVICES = 'professional_services'
-    MARKETING = 'marketing'
-    OTHER = 'other'
-    
-    CATEGORY_CHOICES = [
-        (OFFICE_SUPPLIES, 'Office Supplies'),
-        (TRAVEL, 'Travel'),
-        (MEALS, 'Meals & Entertainment'),
-        (UTILITIES, 'Utilities'),
-        (RENT, 'Rent'),
-        (SOFTWARE, 'Software & Subscriptions'),
-        (HARDWARE, 'Hardware & Equipment'),
-        (PROFESSIONAL_SERVICES, 'Professional Services'),
-        (MARKETING, 'Marketing & Advertising'),
-        (OTHER, 'Other'),
-    ]
-    
-    category = models.CharField(
-        max_length=50,
-        choices=CATEGORY_CHOICES,
-        default=OTHER
+    # Categories - now using custom user categories
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,  # Protect to prevent accidental deletion of categories with transactions
+        related_name='transactions',
+        help_text="Custom category for this transaction"
     )
     
     # UK tax deductible status
