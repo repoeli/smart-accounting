@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.db import models
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -13,8 +14,11 @@ import json
 import uuid
 import os
 
-from .models import Receipt, Transaction
-from .serializers import ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer
+from .models import Receipt, Transaction, Category, Report
+from .serializers import (
+    ReceiptSerializer, TransactionSerializer, ReceiptUploadSerializer,
+    CategorySerializer, ReportSerializer, ReportRequestSerializer
+)
 
 
 class AsyncReceiptViewSet(viewsets.ModelViewSet):
@@ -265,23 +269,230 @@ class TransactionViewSet(viewsets.ModelViewSet):
         return Transaction.objects.filter(owner=self.request.user)
 
 
-def map_veryfi_category_to_internal(veryfi_category):
+def map_veryfi_category_to_internal(veryfi_category, user):
     """
     Map Veryfi categories to our internal categories.
+    Updated to use the Category model instead of hardcoded choices.
     """
+    # Mapping from Veryfi categories to our category names
     mapping = {
-        'Meals & Entertainment': Transaction.MEALS,
-        'Travel': Transaction.TRAVEL,
-        'Supplies & Materials': Transaction.OFFICE_SUPPLIES,
-        'Utilities': Transaction.UTILITIES,
-        'Software': Transaction.SOFTWARE,
-        'Equipment': Transaction.HARDWARE,
-        'Professional Services': Transaction.PROFESSIONAL_SERVICES,
-        'Advertising': Transaction.MARKETING,
-        'Rent or Lease': Transaction.RENT,
+        'Meals & Entertainment': 'Meals & Entertainment',
+        'Travel': 'Travel',
+        'Supplies & Materials': 'Office Supplies',
+        'Utilities': 'Utilities',
+        'Software': 'Software & Subscriptions',
+        'Equipment': 'Hardware & Equipment',
+        'Professional Services': 'Professional Services',
+        'Advertising': 'Marketing & Advertising',
+        'Rent or Lease': 'Rent',
     }
     
-    if not veryfi_category:
-        return Transaction.OTHER
+    category_name = mapping.get(veryfi_category, 'Other')
+    
+    # Try to find the category (user's custom or default)
+    try:
+        category = Category.objects.filter(
+            name=category_name,
+            type=Category.EXPENSE
+        ).filter(
+            models.Q(owner=user) | models.Q(owner__isnull=True)
+        ).first()
         
-    return mapping.get(veryfi_category, Transaction.OTHER)
+        if category:
+            return category
+    except Category.DoesNotExist:
+        pass
+    
+    # Fallback to 'Other' category if not found
+    try:
+        return Category.objects.filter(
+            name='Other',
+            type=Category.EXPENSE
+        ).filter(
+            models.Q(owner=user) | models.Q(owner__isnull=True)
+        ).first()
+    except Category.DoesNotExist:
+        # This should not happen if default categories are properly created
+        return None
+
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing income and expense categories.
+    Supports CRUD operations for user-defined categories.
+    """
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Return categories that belong to the current user or are system defaults.
+        """
+        user = self.request.user
+        return Category.objects.filter(
+            models.Q(owner=user) | models.Q(owner__isnull=True)
+        ).order_by('type', 'name')
+    
+    def perform_create(self, serializer):
+        """Set the owner to the current user when creating categories"""
+        serializer.save(owner=self.request.user)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Prevent deletion of default categories and categories with transactions"""
+        category = self.get_object()
+        
+        # Prevent deletion of default categories
+        if category.is_default:
+            return Response(
+                {"error": "Cannot delete default categories"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Prevent deletion if there are transactions using this category
+        if category.transactions.exists():
+            return Response(
+                {"error": f"Cannot delete category '{category.name}' because it is used by {category.transactions.count()} transaction(s)"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        return super().destroy(request, *args, **kwargs)
+    
+    @action(detail=False, methods=['get'])
+    def by_type(self, request):
+        """Get categories grouped by type (income/expense)"""
+        queryset = self.get_queryset()
+        income_categories = queryset.filter(type=Category.INCOME)
+        expense_categories = queryset.filter(type=Category.EXPENSE)
+        
+        return Response({
+            'income': CategorySerializer(income_categories, many=True, context={'request': request}).data,
+            'expense': CategorySerializer(expense_categories, many=True, context={'request': request}).data
+        })
+
+
+class ReportViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for generating and managing financial reports.
+    """
+    serializer_class = ReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Return reports that belong to the current user"""
+        return Report.objects.filter(owner=self.request.user)
+    
+    def perform_create(self, serializer):
+        """Set the owner to the current user when creating reports"""
+        serializer.save(owner=self.request.user)
+    
+    @swagger_auto_schema(
+        method='post',
+        request_body=ReportRequestSerializer,
+        responses={201: ReportSerializer}
+    )
+    @action(detail=False, methods=['post'])
+    def generate(self, request):
+        """
+        Generate a new financial report based on the provided parameters.
+        """
+        serializer = ReportRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            # Create a new report record
+            report_data = {
+                'report_name': serializer.validated_data['report_name'],
+                'report_type': serializer.validated_data['report_type'],
+                'period_start': serializer.validated_data['period_start'],
+                'period_end': serializer.validated_data['period_end'],
+                'format': serializer.validated_data['format'],
+                'parameters': {
+                    'categories': serializer.validated_data.get('categories', []),
+                    'include_income': serializer.validated_data.get('include_income', True),
+                    'include_expenses': serializer.validated_data.get('include_expenses', True),
+                    'min_amount': str(serializer.validated_data['min_amount']) if serializer.validated_data.get('min_amount') else None,
+                    'max_amount': str(serializer.validated_data['max_amount']) if serializer.validated_data.get('max_amount') else None,
+                }
+            }
+            
+            report_serializer = ReportSerializer(data=report_data, context={'request': request})
+            if report_serializer.is_valid():
+                report = report_serializer.save()
+                
+                # TODO: Implement background task for report generation
+                # For now, we'll mark it as pending and return the report object
+                # In a production system, this would trigger a Celery task
+                
+                return Response(
+                    ReportSerializer(report, context={'request': request}).data,
+                    status=status.HTTP_201_CREATED
+                )
+            else:
+                return Response(report_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """
+        Download a generated report file.
+        """
+        report = self.get_object()
+        
+        if not report.is_generated:
+            return Response(
+                {"error": "Report is not yet generated or generation failed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # TODO: Implement actual file download
+        # For now, return the file path information
+        return Response({
+            "message": "Report download would be implemented here",
+            "file_path": report.file_path,
+            "format": report.format,
+            "size": report.file_size
+        })
+    
+    @action(detail=False, methods=['get'])
+    def templates(self, request):
+        """
+        Get available report templates and their descriptions.
+        """
+        templates = {
+            'monthly': {
+                'name': 'Monthly Report',
+                'description': 'Income and expenses for a specific month',
+                'period': 'month'
+            },
+            'quarterly': {
+                'name': 'Quarterly Report', 
+                'description': 'Financial summary for a quarter (3 months)',
+                'period': 'quarter'
+            },
+            'annual': {
+                'name': 'Annual Report',
+                'description': 'Complete financial overview for a tax year',
+                'period': 'year'
+            },
+            'vat_return': {
+                'name': 'VAT Return',
+                'description': 'VAT calculations for HMRC submission',
+                'period': 'quarter'
+            },
+            'profit_loss': {
+                'name': 'Profit & Loss Statement',
+                'description': 'Income minus expenses analysis',
+                'period': 'custom'
+            },
+            'expense_summary': {
+                'name': 'Expense Summary',
+                'description': 'Detailed breakdown of expenses by category',
+                'period': 'custom'
+            },
+            'income_summary': {
+                'name': 'Income Summary',
+                'description': 'Analysis of income sources and trends',
+                'period': 'custom'
+            }
+        }
+        
+        return Response(templates)
