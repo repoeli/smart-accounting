@@ -18,7 +18,8 @@ from drf_yasg import openapi
 from .models import Account
 from .serializers import (
     RegisterSerializer, AccountSerializer, 
-    ChangePasswordSerializer, EmailVerificationSerializer
+    ChangePasswordSerializer, EmailVerificationSerializer,
+    ForgotPasswordSerializer, ResetPasswordSerializer
 )
 
 
@@ -184,6 +185,145 @@ class VerifyEmailView(APIView):
         except Account.DoesNotExist:
             return Response(
                 {"error": "User not found"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class ForgotPasswordView(generics.GenericAPIView):
+    """
+    Send password reset email with token to user.
+    """
+    serializer_class = ForgotPasswordSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_summary="Request password reset",
+        operation_description="Send password reset email if email exists in system",
+        responses={
+            200: "Password reset email sent if email exists",
+            400: "Invalid input data"
+        }
+    )
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        email = serializer.validated_data['email']
+        
+        try:
+            user = Account.objects.get(email=email)
+            
+            # Generate password reset token
+            token = self._generate_password_reset_token(user)
+            
+            # Send password reset email
+            self._send_password_reset_email(user, token, request)
+            
+        except Account.DoesNotExist:
+            # Don't reveal that the email doesn't exist
+            pass
+        
+        # Always return success message for security
+        return Response(
+            {"message": "If the email exists in our system, a password reset link has been sent."},
+            status=status.HTTP_200_OK
+        )
+    
+    def _generate_password_reset_token(self, user):
+        """Generate a JWT token for password reset."""
+        token_payload = {
+            'user_id': user.id,
+            'exp': datetime.utcnow() + timedelta(hours=1),  # 1 hour expiry
+            'token_type': 'password_reset',
+            'jti': str(uuid.uuid4())
+        }
+        return jwt.encode(token_payload, settings.SECRET_KEY, algorithm='HS256')
+    
+    def _send_password_reset_email(self, user, token, request):
+        """Send a password reset email to the user."""
+        current_site = get_current_site(request).domain
+        reset_url = f"http://{current_site}/reset-password?token={token}"
+        
+        subject = "Password Reset - Smart Accounting"
+        message = f"""
+        Hi {user.first_name},
+        
+        You have requested to reset your password for your Smart Accounting account.
+        
+        Please click the link below to reset your password:
+        {reset_url}
+        
+        This link will expire in 1 hour for security reasons.
+        
+        If you did not request this password reset, please ignore this email and your password will remain unchanged.
+        
+        Best Regards,
+        Smart Accounting Team
+        """
+        
+        email = EmailMessage(
+            subject=subject,
+            body=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[user.email]
+        )
+        email.send()
+
+
+class ResetPasswordView(generics.GenericAPIView):
+    """
+    Reset user password using the token sent via email.
+    """
+    serializer_class = ResetPasswordSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    @swagger_auto_schema(
+        operation_summary="Reset password",
+        operation_description="Reset password using token sent in email",
+        responses={
+            200: "Password reset successfully",
+            400: "Invalid token or password"
+        }
+    )
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        token = serializer.validated_data['token']
+        new_password = serializer.validated_data['new_password']
+        
+        try:
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=['HS256']
+            )
+            
+            # Check token type
+            if payload.get('token_type') != 'password_reset':
+                raise jwt.InvalidTokenError("Invalid token type")
+            
+            # Get user and reset password
+            user = Account.objects.get(id=payload['user_id'])
+            user.set_password(new_password)
+            user.save()
+            
+            return Response(
+                {"message": "Password reset successfully. You can now log in with your new password."},
+                status=status.HTTP_200_OK
+            )
+            
+        except jwt.ExpiredSignatureError:
+            return Response(
+                {"error": "Password reset link has expired. Please request a new one."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except (jwt.DecodeError, jwt.InvalidTokenError):
+            return Response(
+                {"error": "Invalid or malformed reset token."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Account.DoesNotExist:
+            return Response(
+                {"error": "User not found."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

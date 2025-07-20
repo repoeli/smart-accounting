@@ -4,7 +4,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     CustomTokenObtainPairView, RegisterView, 
-    VerifyEmailView, AccountViewSet
+    VerifyEmailView, AccountViewSet,
+    ForgotPasswordView, ResetPasswordView
 )
 
 # Create a router for ViewSets
@@ -18,6 +19,10 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('register/', RegisterView.as_view(), name='register'),
     path('verify-email/', VerifyEmailView.as_view(), name='verify-email'),
+    
+    # Password reset endpoints
+    path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+    path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
     
     # Include the router URLs
     path('', include(router.urls)),
