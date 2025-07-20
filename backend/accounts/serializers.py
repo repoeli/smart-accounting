@@ -104,3 +104,50 @@ class EmailVerificationSerializer(serializers.Serializer):
     Serializer for email verification token.
     """
     token = serializers.CharField(required=True)
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    """
+    Serializer for password reset request.
+    """
+    email = serializers.EmailField(required=True)
+
+    def validate_email(self, value):
+        """
+        Check that the email exists in the system.
+        """
+        try:
+            Account.objects.get(email=value)
+        except Account.DoesNotExist:
+            # Don't reveal whether the email exists or not for security
+            pass
+        return value
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    """
+    Serializer for password reset confirmation.
+    """
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(
+        required=True, style={'input_type': 'password'}
+    )
+    confirm_password = serializers.CharField(
+        required=True, style={'input_type': 'password'}
+    )
+
+    def validate(self, attrs):
+        """
+        Validate that passwords match and meet requirements.
+        """
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError(
+                {"confirm_password": "Password fields didn't match."}
+            )
+        
+        try:
+            validate_password(attrs['new_password'])
+        except ValidationError as e:
+            raise serializers.ValidationError({"new_password": list(e)})
+            
+        return attrs
