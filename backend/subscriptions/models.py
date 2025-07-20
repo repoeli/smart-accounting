@@ -57,6 +57,7 @@ class Subscription(models.Model):
     
     # Features based on plan
     max_documents = models.IntegerField(default=50)  # Basic plan default
+    max_clients = models.IntegerField(default=5)  # Basic plan default
     has_api_access = models.BooleanField(default=False)
     has_report_export = models.BooleanField(default=False)
     has_bulk_upload = models.BooleanField(default=False)
@@ -76,18 +77,21 @@ class Subscription(models.Model):
         """Update feature flags based on the current plan"""
         if self.plan == self.BASIC:
             self.max_documents = 50
+            self.max_clients = 5
             self.has_api_access = False
             self.has_report_export = False
             self.has_bulk_upload = False
             self.has_white_label = False
         elif self.plan == self.PREMIUM:
             self.max_documents = 200
+            self.max_clients = 20
             self.has_api_access = True
             self.has_report_export = True
             self.has_bulk_upload = False
             self.has_white_label = False
         elif self.plan == self.PLATINUM:
             self.max_documents = 9999999  # Unlimited for practical purposes
+            self.max_clients = 9999999  # Unlimited for practical purposes
             self.has_api_access = True
             self.has_report_export = True
             self.has_bulk_upload = True
