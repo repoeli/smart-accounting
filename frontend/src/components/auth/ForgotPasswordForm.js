@@ -14,7 +14,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { passwordResetRequestSchema } from '../../utils/validationSchemas';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const ForgotPasswordForm = () => {
   const { requestPasswordReset, loading, error } = useAuth();

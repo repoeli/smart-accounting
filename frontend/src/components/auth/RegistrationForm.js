@@ -14,13 +14,14 @@ import {
   CircularProgress
 } from '@mui/material';
 import { registrationSchema } from '../../utils/validationSchemas';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const RegistrationForm = () => {
   const { register, loading, error } = useAuth();
   const [snackbarOpen, setSnackbarOpen] = React.useState(false);
   const [snackbarMessage, setSnackbarMessage] = React.useState('');
   const [snackbarSeverity, setSnackbarSeverity] = React.useState('success');
+  const [emailAlreadyExists, setEmailAlreadyExists] = React.useState(false);
 
   const formik = useFormik({
     initialValues: {
@@ -37,8 +38,19 @@ const RegistrationForm = () => {
     },
     validationSchema: registrationSchema,
     onSubmit: async (values) => {
-      // Remove confirmPassword from values as it's not needed by the API
-      const { confirmPassword, ...userData } = values;
+      // Prepare data for the API
+      const userData = {
+        email: values.email,
+        password: values.password,
+        confirmPassword: values.confirmPassword,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        address: values.address,
+        city: values.city,
+        postalCode: values.postalCode,
+        country: values.country,
+        phoneNumber: values.phoneNumber,
+      };
       
       // Call the register function from AuthContext
       const result = await register(userData);
@@ -48,7 +60,21 @@ const RegistrationForm = () => {
         setSnackbarSeverity('success');
         setSnackbarOpen(true);
       } else {
-        setSnackbarMessage(result.error?.message || 'Registration failed. Please try again.');
+        // Check if the error is due to email already existing
+        if (result.error?.code === 'EMAIL_EXISTS') {
+          // Set a special flag for email exists error to show login link
+          setEmailAlreadyExists(true);
+        }
+        
+        // Display specific error messages if available
+        const errorMsg = 
+          result.error?.non_field_errors || 
+          result.error?.email || 
+          result.error?.password || 
+          result.error?.message || 
+          'Registration failed. Please check your inputs and try again.';
+        
+        setSnackbarMessage(Array.isArray(errorMsg) ? errorMsg[0] : errorMsg);
         setSnackbarSeverity('error');
         setSnackbarOpen(true);
       }
@@ -57,6 +83,10 @@ const RegistrationForm = () => {
 
   const handleSnackbarClose = () => {
     setSnackbarOpen(false);
+    // Reset the email already exists state
+    if (emailAlreadyExists) {
+      setEmailAlreadyExists(false);
+    }
   };
 
   return (
@@ -70,6 +100,16 @@ const RegistrationForm = () => {
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error.message || 'An error occurred during registration.'}
+            </Alert>
+          )}
+          
+          {emailAlreadyExists && (
+            <Alert severity="info" sx={{ mb: 2 }} action={
+              <Button color="inherit" size="small" component={Link} to="/login">
+                Login
+              </Button>
+            }>
+              This email is already registered. You can login with your existing account.
             </Alert>
           )}
           

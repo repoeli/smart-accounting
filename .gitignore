@@ -13,12 +13,42 @@ HEROKU.md
 API_PROGRESS.md
 API_IMPLEMENTATION.md
 SWAGGER_FIX.md
+TESTING_AUTH.md
+AUTH_SYSTEM.md
+BACKEND_IMPROVEMENTS.md
+ENHANCEMENT_SUMMARY.md
+DEPLOYMENT_CHECKLIST.md
+COMPLETION_REPORT.md
+FOLDER_STRUCTURE.md
+TEST_AUTH.md
+
+EMAIL_VERIFICATION_FIX.md
 
 # Project-specific ERD files
 accounting_system_erd.vuerd.json
 Final_ERD.vuerd.json
 smart_accounts_ERD_clean.sql
+final_api_summary.py
+manage_test_files.py
+test_receipt_vision.py
+test_xai_vision_focused.py
+test_xai_comprehensive.py
+test_openai_vision.py
+test_api_capabilities.py
+test_api_comparison.py
+test_openai_enhanced.py
+test_gemini_fixed.py
+test_enhancements.py
+xai_final_assessment.py
+xai_final_assessment_results.json
+xai_integration_guide.py
 
+start.sh
+
+
+api_capabilities_final_summary.json
+api_comparison_results.json
+comparison_receipt.png
 # Python
 __pycache__/
 *.py[cod]
@@ -136,3 +166,4 @@ generated_reports/
 
 
 node_modules
+errorlogs

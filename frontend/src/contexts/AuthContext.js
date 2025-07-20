@@ -1,10 +1,27 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-// Import jwt-decode or use a direct token parsing approach
-import authAPI from '../services/authAPI';
+import authAPI from '../services/authApi';
+import axiosInstance from '../utils/axiosConfig';
 
 // Create the auth context
 const AuthContext = createContext(null);
+
+// Function to check if token is expired
+const isTokenExpired = (token) => {
+  if (!token) return true;
+  try {
+    // Simple token parsing without external library
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(window.atob(base64));
+    const currentTime = Date.now() / 1000;
+    // Add some buffer time (30 seconds) to avoid edge cases
+    return payload.exp < currentTime + 30;
+  } catch (error) {
+    console.error('Error parsing token:', error);
+    return true;
+  }
+};
 
 // Create a provider component
 export const AuthProvider = ({ children }) => {
@@ -13,23 +30,15 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Check if token is expired
-  const isTokenExpired = (token) => {
-    if (!token) return true;
-    try {
-      // Simple token parsing without external library
-      const base64Url = token.split('.')[1];
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(window.atob(base64));
-      const currentTime = Date.now() / 1000;
-      return payload.exp < currentTime;
-    } catch (error) {
-      return true;
-    }
-  };
+  // Log out a user
+  const logout = useCallback(async () => {
+    authAPI.logout();
+    setCurrentUser(null);
+    navigate('/login');
+  }, [navigate]);
 
   // Get the current access token
-  const getAccessToken = async () => {
+  const getAccessToken = useCallback(async () => {
     const token = localStorage.getItem('accessToken');
     
     // If no token exists or it's expired, try to refresh
@@ -43,7 +52,7 @@ export const AuthProvider = ({ children }) => {
     }
     
     return token;
-  };
+  }, []);
 
   // Initialize auth state
   useEffect(() => {
@@ -55,15 +64,11 @@ export const AuthProvider = ({ children }) => {
       
       if (token) {
         try {
-          // Fetch the current user profile
-          const result = await authAPI.getCurrentUser();
-          if (result.success) {
-            setCurrentUser(result.data);
-          } else {
-            // If profile fetch fails, log out
-            await logout();
-          }
+          // Fetch the current user profile using axiosInstance with proper token
+          const response = await axiosInstance.get('/accounts/me/');
+          setCurrentUser(response.data);
         } catch (error) {
+          console.error('Failed to fetch user profile:', error);
           setError('Failed to fetch user profile');
           await logout();
         }
@@ -73,7 +78,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     initializeAuth();
-  }, []);
+  }, [getAccessToken, logout]);
 
   // Register a new user
   const register = async (userData) => {
@@ -89,8 +94,8 @@ export const AuthProvider = ({ children }) => {
       return result;
     }
     
-    // Navigate to login or verification screen
-    navigate('/verify-email-sent');
+    // Navigate to email verification sent screen with email in state
+    navigate('/verify-email-sent', { state: { email: userData.email } });
     return result;
   };
 
@@ -99,30 +104,36 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     
-    const result = await authAPI.login(credentials);
-    
-    if (result.success) {
-      // Fetch user profile
-      const userResult = await authAPI.getCurrentUser();
-      if (userResult.success) {
-        setCurrentUser(userResult.data);
-      } else {
-        setError('Failed to fetch user profile');
+    try {
+      // Use axiosInstance for consistent error handling
+      const response = await axiosInstance.post('/accounts/token/', credentials);
+      
+      // Store tokens
+      localStorage.setItem('accessToken', response.data.access);
+      localStorage.setItem('refreshToken', response.data.refresh);
+      
+      // Fetch user profile with the new token
+      try {
+        const userResponse = await axiosInstance.get('/accounts/me/');
+        setCurrentUser(userResponse.data);
+        setLoading(false);
+        return { success: true, data: response.data };
+      } catch (profileError) {
+        console.error('Failed to fetch user profile after login:', profileError);
+        setError({message: 'Login successful but failed to fetch profile'});
         await logout();
+        setLoading(false);
+        return { success: false, error: {message: 'Failed to fetch user profile'} };
       }
-    } else {
-      setError(result.error);
+    } catch (error) {
+      console.error('Login error:', error.response?.data);
+      setError(error.response?.data || {message: 'Login failed'});
+      setLoading(false);
+      return { 
+        success: false, 
+        error: error.response?.data || {message: 'Network error occurred'} 
+      };
     }
-    
-    setLoading(false);
-    return result;
-  };
-
-  // Log out a user
-  const logout = async () => {
-    authAPI.logout();
-    setCurrentUser(null);
-    navigate('/login');
   };
 
   // Verify email
@@ -131,6 +142,22 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     
     const result = await authAPI.verifyEmail(token);
+    
+    setLoading(false);
+    
+    if (!result.success) {
+      setError(result.error);
+    }
+    
+    return result;
+  };
+
+  // Resend verification email
+  const resendVerificationEmail = async (email) => {
+    setLoading(true);
+    setError(null);
+    
+    const result = await authAPI.resendVerificationEmail(email);
     
     setLoading(false);
     

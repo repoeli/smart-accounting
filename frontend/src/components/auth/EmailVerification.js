@@ -9,7 +9,7 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const EmailVerification = () => {
   const { token } = useParams();

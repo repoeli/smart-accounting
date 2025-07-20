@@ -1,15 +1,53 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   Container, 
   Typography, 
   Button, 
   Paper, 
   Box,
-  Alert
+  Alert,
+  Snackbar,
+  CircularProgress
 } from '@mui/material';
+import authAPI from '../../services/authAPI';
 
 const EmailVerificationSent = () => {
+  const location = useLocation();
+  const [loading, setLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
+
+  // Extract email from location state if available
+  const userEmail = location.state?.email;
+
+  const handleResendEmail = async () => {
+    if (!userEmail) {
+      setSnackbarMessage('Could not find your email address. Please try registering again.');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    setLoading(true);
+    const result = await authAPI.resendVerificationEmail(userEmail);
+    setLoading(false);
+
+    if (result.success) {
+      setSnackbarMessage('A new verification email has been sent.');
+      setSnackbarSeverity('success');
+    } else {
+      setSnackbarMessage(result.error?.details || result.error?.message || 'Failed to resend email.');
+      setSnackbarSeverity('error');
+    }
+    setSnackbarOpen(true);
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
   return (
     <Container component="main" maxWidth="sm">
       <Box sx={{ mt: 8, mb: 4 }}>
@@ -35,6 +73,20 @@ const EmailVerificationSent = () => {
               The verification link will expire in 24 hours.
             </Typography>
             
+            {userEmail && (
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  onClick={handleResendEmail}
+                  variant="outlined"
+                  color="secondary"
+                  disabled={loading}
+                  startIcon={loading ? <CircularProgress size={20} /> : null}
+                >
+                  {loading ? 'Sending...' : 'Resend Verification Email'}
+                </Button>
+              </Box>
+            )}
+            
             <Button
               component={Link}
               to="/login"
@@ -48,6 +100,16 @@ const EmailVerificationSent = () => {
           </Box>
         </Paper>
       </Box>
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

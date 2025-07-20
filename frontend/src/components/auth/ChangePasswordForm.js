@@ -13,7 +13,7 @@ import {
   CircularProgress
 } from '@mui/material';
 import { changePasswordSchema } from '../../utils/validationSchemas';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
 const ChangePasswordForm = () => {
   const { changePassword, loading, error } = useAuth();

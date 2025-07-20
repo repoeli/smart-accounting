@@ -6,6 +6,8 @@ const axiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Add withCredentials for CORS requests with credentials
+  withCredentials: false, // Set to true if using HttpOnly cookies
 });
 
 // Function to check if token is expired
@@ -17,31 +19,54 @@ const isTokenExpired = (token) => {
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(window.atob(base64));
     const currentTime = Date.now() / 1000;
-    return payload.exp < currentTime;
+    // Add some buffer time (30 seconds) to avoid edge cases
+    return payload.exp < currentTime + 30;
   } catch (error) {
+    console.error('Error parsing token:', error);
     return true;
   }
 };
 
+// Keep track of refresh token promise to avoid multiple refresh calls
+let refreshTokenPromise = null;
+
 // Function to refresh the token
 const refreshToken = async () => {
+  // If we already have a refresh promise in progress, return it
+  if (refreshTokenPromise) {
+    return refreshTokenPromise;
+  }
+
   const refreshToken = localStorage.getItem('refreshToken');
   if (!refreshToken) {
     return null;
   }
 
-  try {
-    const response = await axios.post(
-      `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1'}/accounts/token/refresh/`,
-      { refresh: refreshToken }
-    );
-    localStorage.setItem('accessToken', response.data.access);
-    return response.data.access;
-  } catch (error) {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    return null;
-  }
+  // Create a new promise for token refresh
+  refreshTokenPromise = axios.post(
+    `${process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api/v1'}/accounts/token/refresh/`,
+    { refresh: refreshToken }
+  )
+    .then(response => {
+      localStorage.setItem('accessToken', response.data.access);
+      // If we got a new refresh token, store it
+      if (response.data.refresh) {
+        localStorage.setItem('refreshToken', response.data.refresh);
+      }
+      return response.data.access;
+    })
+    .catch(error => {
+      console.error('Token refresh failed:', error);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      return null;
+    })
+    .finally(() => {
+      // Reset the refresh token promise
+      refreshTokenPromise = null;
+    });
+
+  return refreshTokenPromise;
 };
 
 // Set up request interceptor
@@ -101,9 +126,6 @@ axiosInstance.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${token}`;
         // Retry the original request
         return axiosInstance(originalRequest);
-      } else {
-        // Redirect to login if refresh fails
-        window.location.href = '/login';
       }
     }
     
