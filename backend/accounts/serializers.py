@@ -1,6 +1,9 @@
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.contrib.auth import authenticate
+from django.utils import timezone
 from .models import Account
 
 
@@ -104,3 +107,56 @@ class EmailVerificationSerializer(serializers.Serializer):
     Serializer for email verification token.
     """
     token = serializers.CharField(required=True)
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    Custom token serializer that validates account status and updates last_login.
+    """
+    username_field = Account.USERNAME_FIELD
+
+    def validate(self, attrs):
+        # Get the email and password
+        email = attrs.get('email')
+        password = attrs.get('password')
+
+        if email and password:
+            # Try to authenticate the user
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,
+                password=password
+            )
+
+            if not user:
+                raise serializers.ValidationError(
+                    'Unable to log in with provided credentials.',
+                    code='authorization'
+                )
+
+            # Check if the user account is active
+            if not user.is_active:
+                raise serializers.ValidationError(
+                    'User account is disabled.',
+                    code='authorization'
+                )
+
+            # Check if the email is verified
+            if not user.email_verified:
+                raise serializers.ValidationError(
+                    'Email address is not verified. Please check your email for verification link.',
+                    code='authorization'
+                )
+
+            # Update last_login timestamp
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+
+            # Call the parent validation to generate tokens
+            attrs[self.username_field] = user.email
+            return super().validate(attrs)
+        else:
+            raise serializers.ValidationError(
+                'Must include "email" and "password".',
+                code='authorization'
+            )
