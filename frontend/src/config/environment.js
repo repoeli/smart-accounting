@@ -2,7 +2,9 @@
  * Environment configuration
  */
 export const ENV = {
-  API_URL: process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1',
+  // In development, proxy handles routing to backend, so use /api/v1 prefix
+  // In production, use full URL with /api/v1 prefix
+  API_URL: process.env.REACT_APP_API_URL || (process.env.NODE_ENV === 'development' ? '/api/v1' : 'http://localhost:8000/api/v1'),
   API_TIMEOUT: parseInt(process.env.REACT_APP_API_TIMEOUT) || 10000,
   TOKEN_REFRESH_THRESHOLD: parseInt(process.env.REACT_APP_TOKEN_REFRESH_THRESHOLD) || 300000,
   APP_NAME: process.env.REACT_APP_APP_NAME || 'Smart Accounting',

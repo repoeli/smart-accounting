@@ -32,11 +32,18 @@ export const API_CONFIG = {
     // Receipts
     RECEIPTS: {
       LIST: '/receipts/',
-      DETAIL: (id) => `/receipts/${id}/`,
+      DETAIL: '/receipts/:id/',
       CREATE: '/receipts/',
-      UPDATE: (id) => `/receipts/${id}/`,
-      DELETE: (id) => `/receipts/${id}/`,
+      UPDATE: '/receipts/:id/',
+      DELETE: '/receipts/:id/',
+      UPLOAD: '/receipts/:id/upload/',
+      PROCESS: '/receipts/:id/process/',
+      REPROCESS: (id) => `/receipts/${id}/reprocess/`,
+      API_STATUS: '/receipts/api_status/',
       STATS: '/receipts/stats/',
+      DASHBOARD: '/receipts/dashboard/',
+      CATEGORIES: '/receipts/categories/',
+      EXPORT: '/receipts/export/',
     },
     
     // Subscriptions

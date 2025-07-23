@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 import logging
 from drf_yasg.utils import swagger_auto_schema
@@ -19,6 +20,47 @@ from .services import AuthService
 # Get logger
 logger = logging.getLogger(__name__)
 Account = get_user_model()
+
+
+class AccountViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for account management operations.
+    """
+    queryset = Account.objects.all()
+    serializer_class = AccountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only the current user's account."""
+        return Account.objects.filter(id=self.request.user.id)
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        """Get current user profile."""
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def logout(self, request):
+        """Logout user by blacklisting refresh token."""
+        try:
+            refresh_token = request.data.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+                
+            return Response({
+                'success': True,
+                'message': 'Successfully logged out'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.warning(f"Logout error: {str(e)}")
+            # Still return success even if token blacklisting fails
+            return Response({
+                'success': True,
+                'message': 'Successfully logged out'
+            }, status=status.HTTP_200_OK)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):

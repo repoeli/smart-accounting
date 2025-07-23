@@ -1,0 +1,51 @@
+# Core Django and API
+asgiref==3.9.1
+certifi==2025.7.9
+charset-normalizer==3.4.2
+Deprecated==1.2.18
+dj-database-url==3.0.1
+Django==4.2.16
+django-cors-headers==4.7.0
+djangorestframework==3.16.0
+djangorestframework_simplejwt==5.4.0
+drf-yasg==1.21.10
+
+# Production Server
+gunicorn==23.0.0
+
+# Background Task Processing (optional for Docker)
+celery==5.4.0
+redis==5.2.1
+
+# HTTP Client
+httpx[http2]==0.27.2
+h11==0.14.0
+
+# AI and Image Processing
+openai==1.51.2
+pillow==11.3.0
+
+# Standard Dependencies
+idna==3.10
+img2pdf==0.6.1
+inflection==0.5.1
+lxml==6.0.0
+packaging==25.0
+pdf2image==1.17.0
+pikepdf==9.9.0
+psycopg2-binary==2.9.10
+PyJWT==2.9.0
+pytesseract==0.3.13
+python-dotenv==1.1.1
+python-magic==0.4.27
+pytz==2025.2
+PyYAML==6.0.2
+requests==2.32.4
+sqlparse==0.5.3
+stripe==12.3.0
+tenacity==8.5.0
+typing_extensions==4.14.1
+tzdata==2025.2
+uritemplate==4.2.0
+uvicorn==0.27.0
+whitenoise==6.7.0

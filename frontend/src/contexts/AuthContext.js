@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authAPI from '../services/authApi';
+import authAPI from '../services/authAPI';
 import axiosInstance from '../utils/axiosConfig';
 
 // Create the auth context

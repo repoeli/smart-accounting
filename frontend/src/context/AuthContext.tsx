@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { AuthContextType, User, LoginCredentials, RegisterData } from '../types';
-import { authApi } from '../services/authApi';
+import { authApi } from '../services/authApiTS';
 import { TokenStorage } from '../services/api';
 import { handleApiError } from '../utils/errorHandler';
 

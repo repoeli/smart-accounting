@@ -16,45 +16,66 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  # Django Backend
+  # Redis for Celery
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # Django Backend - simplified build
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.ubuntu
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+             python manage.py collectstatic --noinput &&
+             uvicorn backend.asgi:application --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-smart_accounts}
+      - REDIS_URL=redis://redis:6379/0
       - DEBUG=True
+      - PORT=8000
     volumes:
       - ./backend:/app
       - ./backend/media:/app/media
       - ./backend/staticfiles:/app/staticfiles
 
-  # React Frontend
+  # React Frontend - simplified
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: node:18-alpine
+    working_dir: /app
+    command: >
+      sh -c "npm install &&
+             npm run build &&
+             npx serve -s build -l 3000"
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    env_file:
-      - .env
-    environment:
-      - REACT_APP_API_BASE_URL=http://localhost:8000/api
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api/v1
 
 volumes:
   db_data:
+  redis_data:

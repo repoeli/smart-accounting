@@ -1,3 +1,4 @@
+# Core Django and API
 asgiref==3.9.1
 certifi==2025.7.9
 charset-normalizer==3.4.2
@@ -8,9 +9,30 @@ django-cors-headers==4.7.0
 djangorestframework==3.16.0
 djangorestframework_simplejwt==5.4.0
 drf-yasg==1.21.10
+
+# Production Server with Performance Optimizations
 gunicorn==23.0.0
-httpx==0.27.0
+gevent==24.11.1
+greenlet==3.1.1
+
+# Background Task Processing
+celery==5.4.0
+redis==5.2.1
+django-celery-beat==2.8.0
+django-celery-results==2.5.1
+
+# HTTP Client with HTTP/2 Support
+httpx[http2]==0.27.2
 h11==0.14.0
+h2==4.1.0
+hyperframe==6.0.1
+hpack==4.0.0
+
+# AI and Image Processing
+openai==1.51.2
+pillow==11.3.0
+
+# Standard Dependencies
 idna==3.10
 img2pdf==0.6.1
 inflection==0.5.1
@@ -18,11 +40,11 @@ lxml==6.0.0
 packaging==25.0
 pdf2image==1.17.0
 pikepdf==9.9.0
-pillow==11.3.0
 psycopg2-binary==2.9.10
 PyJWT==2.9.0
 pytesseract==0.3.13
 python-dotenv==1.1.1
+python-magic==0.4.27
 pytz==2025.2
 PyYAML==6.0.2
 requests==2.32.4
@@ -34,3 +56,6 @@ tzdata==2025.2
 uritemplate==4.2.0
 uvicorn==0.27.0
 whitenoise==6.7.0
+
+# Performance Monitoring (optional for Heroku)
+# newrelic==10.6.0

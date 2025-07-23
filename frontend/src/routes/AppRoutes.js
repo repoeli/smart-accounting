@@ -26,10 +26,17 @@ import EmailVerificationSentPage from '../pages/auth/EmailVerificationSentPage';
 import DashboardPage from '../pages/dashboard/DashboardPage';
 import ProfilePage from '../pages/profile/ProfilePage';
 
-// Receipt Pages
-import ReceiptsPage from '../pages/receipts/ReceiptsPage';
-import ReceiptDetailPage from '../pages/receipts/ReceiptDetailPage';
-import CreateReceiptPage from '../pages/receipts/CreateReceiptPage';
+// Receipt Pages (v2 Only)
+import ReceiptPageV2 from '../pages/ReceiptPageV2'; // New v2 page
+import TestPageV2 from '../pages/TestPageV2'; // Simple test page
+import ReceiptPageV2Simple from '../pages/ReceiptPageV2Simple'; // Minimal v2 page
+import ReceiptTestPage from '../pages/ReceiptTestPage'; // Production test page
+
+// DEBUG - Diagnostic Component for Critical Issue Resolution
+import ReceiptUploadDiagnostic from '../components/debug/ReceiptUploadDiagnostic';
+
+// Demo Pages
+import WidgetDemoPage from '../pages/demo/WidgetDemoPage';
 
 // Settings Pages
 import SettingsPage from '../pages/settings/SettingsPage';
@@ -95,6 +102,11 @@ function AppRoutes() {
         <Route path="/token-debug" element={<TokenDebug />} />
         <Route path="/simple-test" element={<SimpleTokenTest />} />
         <Route path="/email-test" element={<EmailVerificationTest />} />
+        <Route path="/upload-diagnostic" element={<ReceiptUploadDiagnostic />} />
+        <Route path="/receipts-v2-test" element={<ReceiptPageV2Simple />} />
+        <Route path="/receipts-v2-full" element={<ReceiptPageV2 />} />
+        <Route path="/test-simple" element={<TestPageV2 />} />
+        <Route path="/receipt-test" element={<ReceiptTestPage />} />
       </Route>
 
       {/* Protected Routes */}
@@ -111,10 +123,19 @@ function AppRoutes() {
         {/* Profile */}
         <Route path="/profile" element={<ProfilePage />} />
         
-        {/* Receipts */}
-        <Route path="/receipts" element={<ReceiptsPage />} />
-        <Route path="/receipts/new" element={<CreateReceiptPage />} />
-        <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
+        {/* Receipts - v2 is the only implementation */}
+        <Route path="/receipts" element={<ReceiptPageV2 />} />
+        <Route path="/receipts-v2" element={<ReceiptPageV2 />} />
+        <Route path="/receipts/upload" element={<ReceiptPageV2 />} />
+        <Route path="/receipts/list" element={<ReceiptPageV2 />} />
+        <Route path="/receipts/:id" element={<ReceiptPageV2 />} />
+        <Route path="/receipts/:id/edit" element={<ReceiptPageV2 />} />
+        
+        {/* Receipt Test Page - Production Testing */}
+        <Route path="/receipts/test" element={<ReceiptTestPage />} />
+        
+        {/* Demo Pages */}
+        <Route path="/demo/widgets" element={<WidgetDemoPage />} />
         
         {/* Settings */}
         <Route path="/settings" element={<SettingsPage />} />

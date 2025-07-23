@@ -8,7 +8,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react';
 // Initial state
 const initialState = {
   theme: 'light',
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 1024 : true, // Only open by default on desktop (lg breakpoint)
   notifications: [],
   loading: false,
   error: null,
@@ -117,6 +117,29 @@ export function AppProvider({ children }) {
   // Load saved preferences on mount
   useEffect(() => {
     loadPreferences();
+    
+    // Handle window resize for responsive sidebar
+    const handleResize = () => {
+      if (typeof window === 'undefined') return;
+      
+      if (window.innerWidth >= 1024) {
+        // Desktop: ensure sidebar is open if not explicitly closed
+        const savedSidebar = localStorage.getItem('app_sidebar_open');
+        if (savedSidebar === null || JSON.parse(savedSidebar) === true) {
+          dispatch({ type: APP_ACTIONS.SET_SIDEBAR, payload: true });
+        }
+      } else {
+        // Mobile: close sidebar
+        dispatch({ type: APP_ACTIONS.SET_SIDEBAR, payload: false });
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      handleResize(); // Call once on mount
+
+      return () => window.removeEventListener('resize', handleResize);
+    }
   }, []);
 
   // Save preferences when they change

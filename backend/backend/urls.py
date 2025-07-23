@@ -45,6 +45,7 @@ urlpatterns = [
     path("api/v1/accounts/", include("accounts.urls")),
     path("api/v1/receipts/", include("receipts.urls")),
     path("api/v1/subscriptions/", include("subscriptions.urls")),
+    path("api/v1/reports/", include("reports.urls")),  # Added financial reports
     
     # Swagger documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),

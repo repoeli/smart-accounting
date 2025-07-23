@@ -51,11 +51,13 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_yasg",
     "rest_framework_simplejwt",
+    "django_celery_beat",  # For periodic tasks
     
     # Project apps
     "accounts",
     "receipts",
     "subscriptions",
+    "reports",  # Added financial reports app
 ]
 
 MIDDLEWARE = [
@@ -162,6 +164,12 @@ DEFAULT_FILE_STORAGE = os.environ.get(
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# File upload settings
+FILE_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024  # 15MB
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
+
 # S3 settings (when enabled)
 if DEFAULT_FILE_STORAGE == 'storages.backends.s3boto3.S3Boto3Storage':
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
@@ -231,8 +239,13 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.MultiPartParser',
+        'rest_framework.parsers.FormParser',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'PAGE_SIZE': 100,  # Increased from 20 to 100 for better UX
     'EXCEPTION_HANDLER': 'backend.exceptions.custom_exception_handler',
 }
 
@@ -282,6 +295,36 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@smartaccounting.com')
 
+# AI Vision API settings
+OPENAI_API_KEY = os.environ.get('OPEN_AI_API_KEY', '')
+OPENAI_VISION_MODEL = os.environ.get('OPENAI_VISION_MODEL', 'gpt-4o')  # GPT-4o is the top vision API
+XAI_API_KEY = os.environ.get('XAI_API_KEY', '')
+VISION_API_PRIMARY = os.environ.get('VISION_API_PRIMARY', 'openai')
+VISION_API_FALLBACK = os.environ.get('VISION_API_FALLBACK', 'xai')
+VISION_API_TIMEOUT = int(os.environ.get('VISION_API_TIMEOUT', 30))
+VISION_API_MAX_RETRIES = int(os.environ.get('VISION_API_MAX_RETRIES', 3))
+
+# Performance optimization settings
+VISION_API_ENABLE_CACHING = os.environ.get('VISION_API_ENABLE_CACHING', 'True').lower() == 'true'
+VISION_API_ENABLE_OPTIMIZATION = os.environ.get('VISION_API_ENABLE_OPTIMIZATION', 'True').lower() == 'true'
+VISION_API_ENABLE_RATE_LIMITING = os.environ.get('VISION_API_ENABLE_RATE_LIMITING', 'True').lower() == 'true'
+VISION_API_CACHE_TIMEOUT = int(os.environ.get('VISION_API_CACHE_TIMEOUT', 3600))  # 1 hour
+VISION_API_RATE_LIMIT = int(os.environ.get('VISION_API_RATE_LIMIT', 60))  # per minute
+VISION_API_MAX_RETRIES = int(os.environ.get('VISION_API_MAX_RETRIES', 3))
+
+# Enhanced OpenAI settings from best practices
+ENABLE_UK_RECEIPT_ENHANCEMENT = os.environ.get('ENABLE_UK_RECEIPT_ENHANCEMENT', 'True').lower() == 'true'
+OPENAI_TEMPERATURE = float(os.environ.get('OPENAI_TEMPERATURE', '0'))  # Deterministic output
+OPENAI_SEED = int(os.environ.get('OPENAI_SEED', '42'))  # Reproducible results
+OPENAI_MAX_TOKENS = int(os.environ.get('OPENAI_MAX_TOKENS', '2000'))  # Default token limit
+
+# v0.5 Enhanced processing settings
+OPENAI_V5_ENABLE_SEGMENTATION = os.environ.get('OPENAI_V5_ENABLE_SEGMENTATION', 'True').lower() == 'true'
+OPENAI_V5_MAX_MEGAPIXELS = int(os.environ.get('OPENAI_V5_MAX_MEGAPIXELS', '12'))  # Cost guard
+OPENAI_V5_TILE_HEIGHT = int(os.environ.get('OPENAI_V5_TILE_HEIGHT', '1500'))  # px per segment
+OPENAI_V5_TILE_OVERLAP = int(os.environ.get('OPENAI_V5_TILE_OVERLAP', '200'))  # px overlap
+OPENAI_V5_ENABLE_GROUNDING = os.environ.get('OPENAI_V5_ENABLE_GROUNDING', 'True').lower() == 'true'
+
 # Swagger settings
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
@@ -294,3 +337,73 @@ SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,
     'JSON_EDITOR': True,
 }
+
+# ===============================================
+# HEROKU PERFORMANCE OPTIMIZATIONS
+# ===============================================
+
+# Celery Configuration for Background Tasks
+CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_ENABLE_UTC = True
+
+# Performance settings for Celery
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 100
+CELERY_TASK_TIME_LIMIT = 720  # 12 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 600  # 10 minutes
+CELERY_RESULT_EXPIRES = 3600  # 1 hour
+
+# Task routing
+CELERY_TASK_ROUTES = {
+    'receipts.tasks.process_receipt_task': {'queue': 'ocr_processing'},
+    'receipts.tasks.batch_process_receipts': {'queue': 'ocr_batch'},
+    'receipts.tasks.cleanup_temp_files': {'queue': 'maintenance'},
+}
+
+# HTTP/2 and Connection Pooling Settings
+HTTP_CLIENT_SETTINGS = {
+    'http2': True,
+    'max_keepalive_connections': 20,
+    'max_connections': 100,
+    'keepalive_expiry': 30.0,
+    'connect_timeout': 10.0,
+    'read_timeout': 60.0,
+    'write_timeout': 10.0,
+    'pool_timeout': 5.0,
+}
+
+# Concurrent Processing Limits
+MAX_CONCURRENT_OCR_REQUESTS = int(os.environ.get('MAX_CONCURRENT_OCR_REQUESTS', '8'))
+THREAD_POOL_MAX_WORKERS = int(os.environ.get('THREAD_POOL_MAX_WORKERS', '16'))
+
+# Performance Monitoring
+ENABLE_PERFORMANCE_MONITORING = os.environ.get('ENABLE_PERFORMANCE_MONITORING', 'True').lower() == 'true'
+PERFORMANCE_STATS_RETENTION_DAYS = int(os.environ.get('PERFORMANCE_STATS_RETENTION_DAYS', '7'))
+
+# Heroku-specific optimizations
+if 'DYNO' in os.environ:
+    # Running on Heroku
+    HEROKU_DEPLOYMENT = True
+    
+    # Optimize for Heroku's ephemeral filesystem
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    
+    # Use whitenoise for static files
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    
+    # Heroku Postgres optimization
+    DATABASES['default']['CONN_MAX_AGE'] = 600
+    DATABASES['default']['OPTIONS'] = {
+        'MAX_CONNS': 20,
+        'OPTIONS': {
+            'server_side_binding': True,
+        }
+    }
+else:
+    HEROKU_DEPLOYMENT = False

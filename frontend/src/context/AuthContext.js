@@ -4,7 +4,7 @@
  */
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/api/authService';
+import authManager from '../services/auth/AuthManager';
 import tokenStorage from '../services/storage/tokenStorage';
 
 // Initial state
@@ -163,7 +163,7 @@ export function AuthProvider({ children }) {
 
       console.log('AuthContext: Token is valid, fetching user profile...');
       // Verify token and get user profile
-      const user = await authService.getCurrentUser();
+      const user = await authManager.getCurrentUser();
       console.log('AuthContext: User profile response:', user);
       
       dispatch({
@@ -186,8 +186,8 @@ export function AuthProvider({ children }) {
     
     try {
       console.log('🚀 AuthContext: Starting login process');
-      const response = await authService.login(credentials);
-      console.log('✅ AuthContext: AuthService login completed:', response);
+      const response = await authManager.login(credentials);
+      console.log('✅ AuthContext: AuthManager login completed:', response);
       
       if (response.success) {
         console.log('🔄 AuthContext: Dispatching LOGIN_SUCCESS');
@@ -236,7 +236,7 @@ export function AuthProvider({ children }) {
 
     try {
       console.log('AuthContext: Sending registration data to API:', userData);
-      const response = await authService.register(userData);
+      const response = await authManager.register(userData);
       console.log('AuthContext: Registration API response:', response);
       
       dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
@@ -267,7 +267,7 @@ export function AuthProvider({ children }) {
   async function logout() {
     dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: true });
     try {
-      await authService.logout();
+      await authManager.logout();
       dispatch({ type: AUTH_ACTIONS.LOGOUT });
     } catch (error) {
       console.error('Logout error:', error);
@@ -282,7 +282,7 @@ export function AuthProvider({ children }) {
   async function updateProfile(profileData) {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
     try {
-      const response = await authService.updateProfile(profileData);
+      const response = await authManager.updateProfile(profileData);
       if (response.success) {
         dispatch({
           type: AUTH_ACTIONS.SET_USER,
@@ -305,7 +305,7 @@ export function AuthProvider({ children }) {
   async function changePassword(oldPassword, newPassword) {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
     try {
-      const response = await authService.changePassword(oldPassword, newPassword);
+      const response = await authManager.changePassword(oldPassword, newPassword);
       return response;
     } catch (error) {
       dispatch({
@@ -325,19 +325,19 @@ export function AuthProvider({ children }) {
 
     try {
       console.log('AuthContext: Verifying email with token:', token);
-      const response = await authService.verifyEmail(token);
+      const response = await authManager.verifyEmail(token);
       console.log('AuthContext: Email verification response:', response);
       
       dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
       
-      // The authService now returns { success, data, message } or { success: false, error }
+      // The authManager now returns { success, data, message } or { success: false, error }
       if (response.success) {
         return {
           success: true,
           message: response.message || 'Email verified successfully'
         };
       } else {
-        // Handle error response from authService
+        // Handle error response from authManager
         const errorMessage = response.error?.message || 'Email verification failed';
         dispatch({
           type: AUTH_ACTIONS.SET_ERROR,
@@ -370,7 +370,7 @@ export function AuthProvider({ children }) {
   async function requestPasswordReset(email) {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
     try {
-      const response = await authService.requestPasswordReset(email);
+      const response = await authManager.requestPasswordReset(email);
       return response;
     } catch (error) {
       dispatch({
@@ -387,7 +387,7 @@ export function AuthProvider({ children }) {
   async function resetPassword(token, newPassword) {
     dispatch({ type: AUTH_ACTIONS.CLEAR_ERROR });
     try {
-      const response = await authService.resetPassword(token, newPassword);
+      const response = await authManager.resetPassword(token, newPassword);
       return response;
     } catch (error) {
       dispatch({

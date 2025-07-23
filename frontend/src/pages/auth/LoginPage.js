@@ -8,6 +8,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useForm } from '../../hooks';
 import { isValidEmail } from '../../utils';
+import SimpleLoginTest from '../../components/debug/SimpleLoginTest';
 
 const validationSchema = {
   email: [
@@ -192,6 +193,9 @@ function LoginPage() {
             )}
           </button>
         </form>
+        
+        {/* Debug Component */}
+        <SimpleLoginTest />
       </div>
     </div>
   );

@@ -21,8 +21,34 @@ DEPLOYMENT_CHECKLIST.md
 COMPLETION_REPORT.md
 FOLDER_STRUCTURE.md
 TEST_AUTH.md
+COMPLETE_ENHANCEMENT_SUMMARY.md
+CONVERSATION_SUMMARY.md
+deploy_heroku_performance.sh
+DOCKER_BUILD_FIX_SUMMARY.md
+HEROKU_DEVELOPMENT_COMPLETE.md
+HEROKU_PERFORMANCE_OPTIMIZATION.md
+IMPLEMENTATION_COMPLETE.md
+OCR_Receipt_implementation_Prompt.md
+OPENAI_ENHANCEMENT_SUMMARY.md
+openaiOptimizationIdeas.md
+OPTIMISATION_SUMMARY.md
+HEROKU_DEPLOYMENT_COMPLETE.md
+OPENAI_V5_ENHANCEMENT_SUMMARY.md
+OPTIMIZATION_SUMMARY.md
+UK_OPTIMIZATION_SUMMARY.md
+
+V07_PROFESSIONAL_ASSESSMENT.md
 
 EMAIL_VERIFICATION_FIX.md
+LOGIN_TESTING_GUIDE.md
+FIXES_AND_TESTING_GUIDE.md
+ENHANCED_RECEIPT_SYSTEM_SUMMARY.md
+SYSTEM_SUMMARY_COMPLETE.md
+
+VERYFI_VS_OPENAI_COST_COMPARISON.md
+MULTI_API_VISION_SYSTEM.md
+receipt_parser_integration.md
+BRITISH_PRODUCTION_DEPLOYMENT_GUIDE.md
 
 # Project-specific ERD files
 accounting_system_erd.vuerd.json
@@ -38,13 +64,32 @@ test_api_capabilities.py
 test_api_comparison.py
 test_openai_enhanced.py
 test_gemini_fixed.py
+test_multi_api_system.py
+test_v5_fixes.py
+quick_uk_test.py
+test_enhanced_openai.py
+test_v5_enhancements.py
 test_enhancements.py
+production_integration_guide.py
+test_uk_optimizations.py
+test_performance_system.py
 xai_final_assessment.py
 xai_final_assessment_results.json
 xai_integration_guide.py
+validate_optimizations.py
+demo_v5_vs_original.py
+compare_implementations.py
+final_validation.py
+test-login.js
+test_complete_flow.py
+
+openaiOptimizationIdeas.py
 
 start.sh
 
+validate-integration.js
+openai_service_v0.7.py
+openai_service.py
 
 api_capabilities_final_summary.json
 api_comparison_results.json
@@ -167,3 +212,140 @@ generated_reports/
 
 node_modules
 errorlogs
+test_real_receipts.py
+test_receipt_fix.py
+test_receipt.png
+test_receipt.txt
+test_reprocess_endpoint.py
+test_upload_fix.html
+test_upload_fix.js
+test_v6_comprehensive.py
+test_v6_enhancements.py
+V6_INTEGRATION_STATUS.md
+backend/debug_data_extraction.py
+backend/debug_middleware.py
+backend/final_summary.py
+backend/monitor_processing.py
+backend/requirements-docker-fixed.txt
+.gitignore
+backend/test_api_upload.py
+backend/test_british_currency_verification.py
+backend/test_british_currency.py
+backend/test_complete_processing.py
+backend/test_direct_processing.py
+backend/test_final_integration.py
+backend/test_final.py
+backend/test_health.py
+backend/test_login_and_upload.py
+backend/test_mapping.py
+backend/test_real_receipts_v2.py
+backend/test_results.txt
+backend/test_simple.py
+backend/test_single_receipt.py
+backend/test_upload_simple.py
+backend/test_with_output.py
+backend/veryfi_openai_cost_calculator.py
+backend/receipts/management/commands/test_receipt_serializer.py
+backend/receipts/management/commands/check_receipt.py
+backend/receipts/management/commands/test_uk_receipts.py
+backend/receipts/management/commands/test_vision_apis.py
+frontend_prompt.md
+receipt_upload.txt
+frontend/src/utils/apiTest.js
+debug_data_extraction.py
+debug_api_response.py
+frontend/src/pages/receipts/ReceiptUploadPage.jsx
+COSTCO_RECEIPT_FIX_IMPLEMENTATION.md
+COSTCO_RECEIPT_FIX_ANALYSIS.md
+.gitignore
+ENHANCED_RECEIPT_UPLOAD_REFACTOR_COMPLETE.md
+IMMEDIATE_NEXT_STEPS.md
+MUI_TOOLTIP_FIX_SUMMARY.md
+PHASE_2A_COMPLETION_REPORT.md
+PHASE_2A_FIX_VERIFICATION.md
+PHASE_2A_IMPLEMENTATION_COMPLETE.md
+SCHEMA_TRANSFORMATION_PHASE_1_COMPLETE.md
+test_api_directly.html
+test_costco_fix.py
+test_costco_validation.py
+test_openai_standalone.py
+test_original_approach.py
+test_simplified_extraction.py
+test_single_tile.py
+test_v09_performance.py
+test_v09_real_receipts.py
+validate_costco_fix.py
+verify_phase_2a.bat
+verify_phase_2a.sh
+backend/test_grocery_receipt.py
+backend/test_simple_receipt.py
+backend/test_standalone_openai.py
+backend/scripts/test_openai_service.py
+
+# =============================================================================
+# UNUSED FRONTEND FILES - VERIFIED FOR REMOVAL (Analysis Date: July 23, 2025)
+# =============================================================================
+# These files have been analyzed and confirmed as unused in the active codebase.
+# They are safe to remove and excluded from commits to prevent accidental tracking.
+
+# Legacy Upload Components (Not Imported)
+frontend/src/components/receipts/EnhancedReceiptUpload_New.jsx
+frontend/src/components/receipts/EnhancedReceiptUpload_Phase2A.jsx
+frontend/src/components/receipts/ReceiptUploadComponent.jsx
+frontend/src/components/receipts/ReceiptUploadForm.jsx
+frontend/src/components/receipts/ReceiptParsingStatus.jsx
+
+# Legacy Layout Components (Not Imported)
+frontend/src/components/layout/ProtectedRoute.tsx
+frontend/src/components/layout/Dashboard.js
+
+# Legacy Page Components (Not Imported)
+frontend/src/pages/receipts/ReceiptDetailPage.js
+frontend/src/pages/receipts/ReceiptsPage.js
+frontend/src/pages/receipts/ReceiptUploadPage.jsx
+frontend/src/pages/dashboard/DashboardPage.tsx
+frontend/src/pages/auth/LoginPage.tsx
+
+# Duplicate Context & Services (TypeScript/Legacy Variants)
+frontend/src/context/AuthContext.ts
+frontend/src/services/api/receiptPerformanceService_FIXED.js
+frontend/src/services/api/authAPI.js
+frontend/src/services/api/authApiTS.ts
+
+# Debug & Test Components (Development Only)
+frontend/src/components/debug/DebugPanel.jsx
+frontend/src/components/debug/ReceiptUploadDebug.jsx
+frontend/src/components/test/TestComponent.jsx
+frontend/src/components/test/ReceiptTestComponent.jsx
+
+# Unused Utility Files & TypeScript Variants
+frontend/src/utils/receiptUploadFixTest.js
+frontend/src/utils/performance.js
+frontend/src/utils/validationSchemas.js
+frontend/src/utils/validation.ts
+frontend/src/utils/errorHandler.ts
+frontend/src/utils/cn.ts
+
+# Legacy App Files
+frontend/src/App.simple.js
+
+# Broken Import Reference (File Missing)
+frontend/src/utils/apiTest.js
+
+# =============================================================================
+# END UNUSED FRONTEND FILES SECTION
+# =============================================================================
+openai_receipt_parcer.py
+backend/ASDA1.jpg
+backend/cpg-receipt-grocery.jpg
+backend/bill-ace-hardware.jpg
+backend/FinalERD.png
+backend/receipt-himawari-food.jpeg
+backend/receipt-lowes-hardware.jpeg
+backend/receipt-starbucks-beverage.jpeg
+backend/receiptify-2.jpg
+backend/royal mail.png
+backend/receipts/services/openai_service_backup.py
+backend/scripts/ASDA1.jpg
+backend/scripts/cpg-receipt-grocery.jpg
+backend/scripts/bill-ace-hardware.jpg

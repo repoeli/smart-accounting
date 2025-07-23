@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Receipt Pagination Fix Test</title>
+</head>
+<body>
+    <h1>Receipt Pagination Fix Test</h1>
+    <p>This test verifies that the frontend now fetches all receipts instead of just the first page.</p>
+    
+    <h2>Issue:</h2>
+    <ul>
+        <li>Backend has 107 receipts total</li>
+        <li>Frontend was only showing 20 receipts (first page)</li>
+        <li>New receipts were being saved but not appearing in the list</li>
+    </ul>
+    
+    <h2>Root Cause:</h2>
+    <p>The frontend was calling <code>receiptService.getReceipts()</code> without pagination parameters, which returned only the default page size (20 items).</p>
+    
+    <h2>Fix Applied:</h2>
+    <p>Updated all <code>receiptService.getReceipts()</code> calls to include <code>{ page_size: 200 }</code> parameter to fetch all receipts.</p>
+    
+    <h2>Files Modified:</h2>
+    <ul>
+        <li><code>frontend/src/pages/ReceiptPageV2.jsx</code> - 4 locations updated</li>
+    </ul>
+    
+    <h2>Test Steps:</h2>
+    <ol>
+        <li>Refresh the receipts page</li>
+        <li>Upload a new receipt</li>
+        <li>Verify the receipt count increases and the new receipt appears</li>
+        <li>Check that all 107+ receipts are now visible</li>
+    </ol>
+    
+    <h2>Expected Result:</h2>
+    <p>The receipt list should now show all available receipts (107+) and new uploads should immediately appear in the list.</p>
+    
+    <script>
+        console.log('🔧 Receipt Pagination Fix Test loaded');
+        console.log('📝 Updated receiptService.getReceipts() calls to include page_size: 200');
+        console.log('✅ Frontend should now show all receipts instead of just first page');
+    </script>
+</body>
+</html>

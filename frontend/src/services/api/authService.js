@@ -15,11 +15,9 @@ class AuthService {
   async register(userData) {
     try {
       const endpoint = API_CONFIG.ENDPOINTS.AUTH.REGISTER;
-      const fullUrl = `${API_CONFIG.BASE_URL}${endpoint}`;
       
-      console.log('AuthService: API_CONFIG.BASE_URL:', API_CONFIG.BASE_URL);
+      console.log('AuthService: BASE_URL:', API_CONFIG.BASE_URL);
       console.log('AuthService: Registration endpoint:', endpoint);
-      console.log('AuthService: Full URL:', fullUrl);
       console.log('AuthService: Registration data:', userData);
       
       const response = await httpClient.post(endpoint, userData);

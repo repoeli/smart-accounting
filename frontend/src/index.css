@@ -36,6 +36,41 @@ code {
   box-shadow: 0 6px 12px rgba(0,0,0,0.15);
 }
 
+/* Receipt Details Page Layout Fixes */
+.receipt-details-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .receipt-details-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Performance Metrics Alignment */
+.performance-metric-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 120px;
+  padding: 16px;
+}
+
+/* Financial Breakdown Alignment */
+.financial-breakdown-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 100px;
+  padding: 16px;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .main-layout {
@@ -54,4 +89,298 @@ code {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
+  
+  .receipt-details-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .performance-metric-box {
+    height: auto;
+    min-height: 100px;
+  }
+  
+  .financial-breakdown-item {
+    height: auto;
+    min-height: 80px;
+  }
+}
+
+/* Grid alignment helpers */
+.align-center-grid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equal-height-grid > * {
+  display: flex;
+  flex-direction: column;
+}
+
+.equal-height-grid > * > * {
+  flex: 1;
+}
+
+/* Dashboard Layout Fixes */
+.dashboard-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: stretch;
+}
+
+.dashboard-receipts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  align-items: start;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+/* Receipt Card Alignment */
+.receipt-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 200px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.receipt-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.receipt-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Fixed Grid for Responsive Receipts */
+.receipts-responsive-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .receipts-responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 768px) {
+  .receipts-responsive-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .receipts-responsive-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .receipts-responsive-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Dashboard Widget Alignment */
+.dashboard-widget {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.dashboard-widget-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Dark mode support for dashboard */
+.dark .dashboard-widget {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.dark .dashboard-widget-header {
+  border-color: #4b5563;
+}
+
+.dark .receipt-card {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+/* Ensure proper spacing between dashboard sections */
+.dashboard-container > * + * {
+  margin-top: 1.5rem;
+}
+
+/* 🚨 CRITICAL FIX: Receipts Page Layout Constraints */
+/* Fix for the main receipt page container overflow issue */
+.receipts-page-container {
+  max-width: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  min-height: 100vh;
+  background-color: #f9fafb;
+}
+
+.receipts-page-header {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  max-width: 100%;
+  width: 100%;
+}
+
+.receipts-page-content {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 24px;
+  box-sizing: border-box;
+  /* Ensure content uses full available width */
+  margin: 0;
+}
+
+/* Fix for Material-UI Box components taking full viewport */
+.receipts-content-box {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  /* Ensure content stretches to use available space */
+  flex: 1;
+}
+
+/* Emergency debug section constraints */
+.emergency-debug-section {
+  max-width: 100%;
+  max-height: 200px;
+  overflow: auto;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  width: 100%;
+}
+
+/* Receipt list section constraints */
+.receipts-list-section {
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+  display: block !important;
+  /* Use full width available from the main content area */
+  flex: 1;
+}
+
+/* Grid layout for receipt cards - optimized for larger content area */
+.receipt-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Enhanced responsive breakpoints for larger content area */
+@media (min-width: 768px) {
+  .receipt-cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .receipt-cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+  }
+  
+  .receipts-page-content {
+    padding: 32px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .receipt-cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 28px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .receipt-cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 32px;
+  }
+  
+  .receipts-page-content {
+    padding: 40px;
+  }
+}
+
+/* Responsive breakpoints for smaller screens */
+@media (max-width: 640px) {
+  .receipt-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .receipts-page-content {
+    padding: 16px;
+  }
+}
+
+/* Override Material-UI fixed positioning that causes layout issues */
+.MuiBox-root[style*="position: absolute"],
+.MuiBox-root[style*="position: fixed"] {
+  position: relative !important;
+}
+
+/* Ensure slide transitions don't break layout */
+.MuiSlide-root {
+  position: relative !important;
+  width: 100% !important;
+  height: auto !important;
 }

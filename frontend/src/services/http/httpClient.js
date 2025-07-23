@@ -11,7 +11,9 @@ import tokenStorage from '../storage/tokenStorage';
 const httpClient = axios.create({
   baseURL: API_CONFIG.BASE_URL,
   timeout: API_CONFIG.TIMEOUT,
-  headers: API_CONFIG.HEADERS,
+  headers: {
+    ...API_CONFIG.HEADERS
+  }
 });
 
 // Track refresh token promise to prevent multiple simultaneous requests
@@ -23,14 +25,23 @@ let refreshTokenPromise = null;
  */
 httpClient.interceptors.request.use(
   (config) => {
-    console.log('🔍 HTTP CLIENT REQUEST INTERCEPTOR - CRITICAL DEBUG');
-    console.log('URL:', config.url);
-    console.log('Method:', config.method?.toUpperCase());
+    // Debug logging to identify URL duplication
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 HTTP REQUEST:', config.method?.toUpperCase(), config.url);
+      console.log('📡 API Request Debug:', {
+        url: config.url,
+        baseURL: config.baseURL,
+        fullURL: config.baseURL ? new URL(config.url, config.baseURL).href : config.url,
+        method: config.method
+      });
+    }
     
     // Define public endpoints that don't need authentication
     const publicEndpoints = [
       '/accounts/register/',
       '/accounts/login/',
+      '/accounts/token/',
+      '/accounts/token/refresh/',
       '/accounts/verify-email/',
       '/accounts/resend-verification/',
       '/accounts/password/reset/',
@@ -42,69 +53,38 @@ httpClient.interceptors.request.use(
       config.url?.includes(endpoint) || config.url?.endsWith(endpoint)
     );
     
-    console.log('🔓 Is public endpoint:', isPublicEndpoint);
-    
     if (isPublicEndpoint) {
-      console.log('✅ PUBLIC ENDPOINT - Skipping authorization header');
-      console.log('=== REQUEST HEADERS (PUBLIC) ===');
-      Object.keys(config.headers).forEach(header => {
-        console.log(`${header}:`, config.headers[header]);
-      });
-      console.log('=== END HTTP CLIENT REQUEST INTERCEPTOR ===');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ PUBLIC ENDPOINT - Skipping authorization header');
+      }
       return config;
     }
     
     // For private endpoints, add authorization header
-    console.log('🔒 PRIVATE ENDPOINT - Adding authorization header');
-    
-    // Check all possible token sources
-    console.log('=== TOKEN SOURCES CHECK ===');
-    
-    // 1. TokenStorage service
     const accessToken = tokenStorage.getAccessToken();
-    console.log('1. TokenStorage.getAccessToken():', accessToken ? `EXISTS (${accessToken.length} chars)` : 'NULL');
-    
-    // 2. Direct localStorage with correct key
     const directToken = localStorage.getItem('smart_accounting_token');
-    console.log('2. localStorage["smart_accounting_token"]:', directToken ? `EXISTS (${directToken.length} chars)` : 'NULL');
-    
-    // 3. All localStorage keys for debugging
-    const allKeys = Object.keys(localStorage);
-    console.log('3. All localStorage keys:', allKeys);
-    
-    // 4. Raw localStorage dump for tokens
-    allKeys.forEach(key => {
-      if (key.includes('token') || key.includes('auth') || key.includes('smart')) {
-        const value = localStorage.getItem(key);
-        console.log(`   ${key}:`, value ? `EXISTS (${value.length} chars)` : 'NULL');
-      }
-    });
-    
-    // Use whichever token is available
     const finalToken = accessToken || directToken;
-    console.log('=== FINAL TOKEN DECISION ===');
-    console.log('Final token selected:', finalToken ? `EXISTS (${finalToken.substring(0, 30)}...)` : 'NONE');
     
     if (finalToken) {
       config.headers.Authorization = `Bearer ${finalToken}`;
-      console.log('✅ Authorization header SET');
-      console.log('✅ Header value:', `Bearer ${finalToken.substring(0, 30)}...`);
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       console.log('❌ NO TOKEN FOUND - Authorization header NOT SET');
-      console.log('❌ This will result in 401 Unauthorized');
     }
     
-    // Log all headers being sent
-    console.log('=== REQUEST HEADERS ===');
-    Object.keys(config.headers).forEach(header => {
-      if (header.toLowerCase() === 'authorization') {
-        console.log(`${header}:`, config.headers[header] ? 'SET' : 'NOT_SET');
-      } else {
-        console.log(`${header}:`, config.headers[header]);
+    // CRITICAL FIX: Handle FormData uploads properly
+    if (config.data instanceof FormData) {
+      // For FormData uploads, remove Content-Type header to let browser set it with boundary
+      delete config.headers['Content-Type'];
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 HTTP Client: FormData detected, removing Content-Type header');
       }
-    });
+    }
     
-    console.log('=== END HTTP CLIENT REQUEST INTERCEPTOR ===');
+    // Log request data for debugging 415 errors (only in development)
+    if (process.env.NODE_ENV === 'development' && config.data && (config.method === 'patch' || config.method === 'put' || config.method === 'post')) {
+      console.log('REQUEST DATA:', typeof config.data, config.data instanceof FormData ? 'FormData' : 'JSON');
+    }
     
     return config;
   },
@@ -120,8 +100,8 @@ httpClient.interceptors.request.use(
  */
 httpClient.interceptors.response.use(
   (response) => {
-    // Log response in development
-    if (process.env.NODE_ENV === 'development') {
+    // Log response only in development and only for errors or important requests
+    if (process.env.NODE_ENV === 'development' && response.status >= 400) {
       console.log(`✅ ${response.config.method?.toUpperCase()} ${response.config.url}`, {
         status: response.status,
         data: response.data,
@@ -133,12 +113,11 @@ httpClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Log error in development
+    // Log errors only in development
     if (process.env.NODE_ENV === 'development') {
       console.error(`❌ ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`, {
         status: error.response?.status,
         message: error.message,
-        data: error.response?.data,
       });
     }
     
@@ -147,6 +126,25 @@ httpClient.interceptors.response.use(
       originalRequest._retry = true;
       
       console.log('🔐 HTTP Client: Got 401 error, checking for refresh token...');
+      
+      // Define endpoints that should NOT trigger token refresh
+      const authEndpoints = [
+        '/accounts/token/',
+        '/accounts/login/',
+        '/accounts/register/',
+        '/accounts/verify-email/',
+        '/accounts/password/reset/',
+      ];
+      
+      // Check if this is an auth endpoint
+      const isAuthEndpoint = authEndpoints.some(endpoint => 
+        originalRequest.url?.includes(endpoint) || originalRequest.url?.endsWith(endpoint)
+      );
+      
+      if (isAuthEndpoint) {
+        console.log('🔓 HTTP Client: 401 on auth endpoint, not attempting token refresh');
+        return Promise.reject(error);
+      }
       
       // Check if we have a refresh token before attempting refresh
       const refreshToken = tokenStorage.getRefreshToken();
@@ -218,6 +216,7 @@ async function refreshAccessToken() {
   }
   
   try {
+    // Use a plain axios instance to avoid interceptor recursion
     const response = await axios.post(
       `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.AUTH.REFRESH}`,
       { refresh: refreshToken },

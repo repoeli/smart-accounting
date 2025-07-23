@@ -58,13 +58,17 @@ function Sidebar() {
 
   return (
     <div
-      className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:w-16'
+      className={`fixed inset-y-0 left-0 z-50 bg-white dark:bg-gray-800 shadow-lg transform transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
+        sidebarOpen 
+          ? 'translate-x-0 w-52' 
+          : '-translate-x-full w-52 lg:translate-x-0 lg:w-16'
       }`}
     >
       <div className="flex flex-col h-full">
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 px-4 bg-blue-600 dark:bg-blue-700">
+        <div className={`flex items-center h-16 px-4 bg-blue-600 dark:bg-blue-700 ${
+          sidebarOpen ? 'justify-center lg:justify-start' : 'justify-center'
+        }`}>
           <div className="flex items-center">
             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
               <span className="text-blue-600 font-bold text-lg">SA</span>
@@ -78,7 +82,7 @@ function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-2">
+        <nav className={`flex-1 py-6 space-y-2 ${sidebarOpen ? 'px-4' : 'px-2'}`}>
           {navigationItems.map((item) => {
             const isActive = location.pathname === item.path;
             
@@ -86,11 +90,12 @@ function Sidebar() {
               <button
                 key={item.name}
                 onClick={() => handleNavigation(item.path)}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                className={`w-full flex items-center py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
                   isActive
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-                } ${!sidebarOpen ? 'justify-center' : ''}`}
+                } ${sidebarOpen ? 'px-3' : 'px-2 justify-center'}`}
+                title={!sidebarOpen ? item.name : undefined}
               >
                 <span className="flex-shrink-0">{item.icon}</span>
                 {sidebarOpen && (

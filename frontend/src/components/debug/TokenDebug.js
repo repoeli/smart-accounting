@@ -13,6 +13,9 @@ function TokenDebug() {
   const [lastUpdate, setLastUpdate] = useState(new Date());
 
   const updateTokenStatus = () => {
+    // Only update if component is visible and in development
+    if (process.env.NODE_ENV !== 'development') return;
+    
     const tokens = tokenStorage.getTokens();
     const directAccess = localStorage.getItem('smart_accounting_token');
     const directRefresh = localStorage.getItem('smart_accounting_refresh_token');
@@ -33,8 +36,8 @@ function TokenDebug() {
       // Validation
       accessTokenValid: tokens.accessToken && !tokenStorage.isTokenExpired(tokens.accessToken),
       
-      // All localStorage keys (for debugging)
-      allLocalStorageKeys: Object.keys(localStorage)
+      // Reduce localStorage scanning frequency
+      allLocalStorageKeys: Object.keys(localStorage).filter(key => key.includes('smart_accounting'))
     });
     
     setLastUpdate(new Date());
@@ -42,8 +45,11 @@ function TokenDebug() {
 
   useEffect(() => {
     updateTokenStatus();
-    const interval = setInterval(updateTokenStatus, 1000); // Update every second
-    return () => clearInterval(interval);
+    // Reduce update frequency from 1000ms to 5000ms (5 seconds) and only in development
+    if (process.env.NODE_ENV === 'development') {
+      const interval = setInterval(updateTokenStatus, 5000); // Update every 5 seconds instead of 1
+      return () => clearInterval(interval);
+    }
   }, []);
 
   const getStatusColor = (status) => {
@@ -64,6 +70,11 @@ function TokenDebug() {
       alert(`API call failed: ${error.message}`);
     }
   };
+
+  // Only render in development mode
+  if (process.env.NODE_ENV !== 'development') {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-4 right-4 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4 max-w-md z-50">

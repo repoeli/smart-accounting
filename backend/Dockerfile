@@ -8,8 +8,16 @@ ENV DJANGO_SETTINGS_MODULE=backend.settings
 # Set work directory
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
+# Install system dependencies for image processing
+RUN apt-get update && apt-get install -y \
+    libmagic1 \
+    libmagic-dev \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements-docker-fixed.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project

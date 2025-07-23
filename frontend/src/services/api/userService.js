@@ -110,12 +110,7 @@ class UserService {
       
       const response = await httpClient.post(
         API_CONFIG.ENDPOINTS.USERS.AVATAR.replace(':id', userId),
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }
+        formData
       );
       
       return {
