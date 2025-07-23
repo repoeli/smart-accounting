@@ -349,3 +349,14 @@ backend/receipts/services/openai_service_backup.py
 backend/scripts/ASDA1.jpg
 backend/scripts/cpg-receipt-grocery.jpg
 backend/scripts/bill-ace-hardware.jpg
+OPENAI_HTTPX_COMPATIBILITY_FIX.md
+install_requirements.sh
+requirements-docker-minimal.txt
+requirements-docker-minimal.txt
+requirements-docker-minimal.txt
+requirements-docker-stable.txt
+requirements-docker-minimal.txt
+requirements-docker.txt
+test_openai_compatibility.py
+requirements-docker-minimal.txt
+requirements-docker-minimal.txt

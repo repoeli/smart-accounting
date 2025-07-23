@@ -80,8 +80,23 @@ class VisionAPIRouter:
     """
     
     def __init__(self):
-        self.openai_service = OpenAIVisionService()
-        self.xai_service = XAIGrokService()
+        # Initialize services with error handling
+        try:
+            self.openai_service = OpenAIVisionService()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to initialize OpenAI service: {e}")
+            self.openai_service = None
+        
+        try:
+            self.xai_service = XAIGrokService()
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to initialize XAI service: {e}")
+            self.xai_service = None
+        
         self.circuit_breaker = APICircuitBreaker()
         
         # Performance optimizations
@@ -106,7 +121,12 @@ class VisionAPIRouter:
             'xai': self.xai_service,
             'xai_grok': self.xai_service,  # Alternative name
         }
-        return services.get(api_name.lower())
+        service = services.get(api_name.lower())
+        if service is None:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Service '{api_name}' is not available or failed to initialize")
+        return service
     
     def _get_optimized_api_order(self, preferred_api: Optional[str] = None) -> List[str]:
         """Get optimized API order based on performance and availability."""

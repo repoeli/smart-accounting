@@ -10,14 +10,44 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from decimal import Decimal
 import json
+from datetime import datetime
 
 from .models import Receipt
 from .services.vision_api_router import VisionAPIRouter
 
 logger = logging.getLogger(__name__)
 
-# Create a single router instance for task processing
-router = VisionAPIRouter()
+# Create a single router instance for task processing with error handling
+router = None
+router_error = None
+
+def get_router():
+    """Get the VisionAPIRouter instance, initializing if needed"""
+    global router, router_error
+    
+    if router is not None:
+        return router
+    
+    if router_error is not None:
+        # Don't retry if we already failed
+        raise Exception(f"VisionAPIRouter initialization previously failed: {router_error}")
+    
+    try:
+        from .services.vision_api_router import VisionAPIRouter
+        router = VisionAPIRouter()
+        logger.info("VisionAPIRouter initialized successfully")
+        return router
+    except Exception as e:
+        router_error = str(e)
+        logger.error(f"Failed to initialize VisionAPIRouter: {e}")
+        raise Exception(f"VisionAPIRouter initialization failed: {e}")
+
+# Try to initialize router on import, but don't fail if it doesn't work
+try:
+    router = get_router()
+except Exception as e:
+    logger.warning(f"Initial router initialization failed: {e}. Will retry on task execution.")
+    router = None
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str, Any]:
@@ -32,6 +62,28 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
         Dict containing processing results and metadata
     """
     try:
+        # Get router instance (will initialize if needed)
+        try:
+            current_router = get_router()
+        except Exception as e:
+            error_msg = f"VisionAPIRouter is not available: {str(e)}"
+            logger.error(error_msg)
+            
+            # Update receipt status to failed
+            try:
+                receipt = Receipt.objects.get(id=receipt_id)
+                receipt.status = 'failed'
+                receipt.error_message = error_msg
+                receipt.save()
+            except:
+                pass
+            
+            return {
+                'success': False,
+                'error': error_msg,
+                'receipt_id': receipt_id
+            }
+        
         # Get receipt from database
         receipt = Receipt.objects.get(id=receipt_id)
         
@@ -50,7 +102,7 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
             if use_v5:
                 # Use v0.5 method for enhanced processing
                 result = loop.run_until_complete(
-                    router.openai_service.process_receipt_v5(
+                    current_router.openai_service.process_receipt_v5(
                         receipt.image.file, 
                         receipt.filename or f"receipt_{receipt_id}"
                     )
@@ -58,7 +110,7 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
             else:
                 # Use standard processing
                 result = loop.run_until_complete(
-                    router.process_receipt(
+                    current_router.process_receipt(
                         receipt.image.file, 
                         receipt.filename or f"receipt_{receipt_id}"
                     )

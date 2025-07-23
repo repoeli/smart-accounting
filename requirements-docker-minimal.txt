@@ -11,7 +11,16 @@ PyJWT==2.9.0
 drf-yasg==1.21.10
 celery==5.4.0
 redis==5.2.1
-openai==1.51.2
+# OpenAI and HTTP client - specific compatible versions
+openai==1.30.0
+httpx==0.27.2
 pillow==11.3.0
 requests==2.32.4
 stripe==12.3.0
+dj-database-url==3.0.1
+djangorestframework_simplejwt==5.4.0
+django-celery-beat==2.8.0
+django-celery-results==2.5.1
+sqlparse==0.5.3
+pytz==2025.2
+tzdata==2025.2
