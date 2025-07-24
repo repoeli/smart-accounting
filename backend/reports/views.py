@@ -21,6 +21,7 @@ from django.db.models import (
 )
 from django.db.models.functions import Coalesce, Extract, TruncMonth, TruncYear, TruncDay
 from django.utils import timezone
+from django.conf import settings
 from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -32,7 +33,7 @@ from accounts.models import Account
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def income_vs_expense_report(request):
     """
     Monthly Income vs Expense Report
@@ -125,18 +126,25 @@ def income_vs_expense_report(request):
             
             previous_net = net_balance
         
-        # Calculate summary statistics
-        total_income = sum(item['income'] for item in report_data)
-        total_expenses = sum(item['expenses'] for item in report_data)
-        avg_monthly_income = total_income / len(report_data) if report_data else 0
-        avg_monthly_expenses = total_expenses / len(report_data) if report_data else 0
+        # Calculate summary statistics using database aggregations
+        summary_totals = transactions.aggregate(
+            total_income=Sum('total_amount', filter=Q(transaction_type='income'), output_field=DecimalField()),
+            total_expenses=Sum('total_amount', filter=Q(transaction_type='expense'), output_field=DecimalField()),
+            total_months=Count('id', distinct=True, filter=Q(transaction_date__month__isnull=False))
+        )
+        
+        total_income = float(summary_totals['total_income'] or 0)
+        total_expenses = float(summary_totals['total_expenses'] or 0)
+        total_months = len(report_data) if report_data else 1  # Use report_data length for accurate month count
+        avg_monthly_income = total_income / total_months if total_months > 0 else 0
+        avg_monthly_expenses = total_expenses / total_months if total_months > 0 else 0
         
         return Response({
             'report_type': 'income_vs_expense',
             'period': {
                 'start_date': start_date.isoformat(),
                 'end_date': end_date.isoformat(),
-                'total_months': len(report_data)
+                'total_months': total_months
             },
             'filters': {
                 'currency': currency_filter,
@@ -162,7 +170,7 @@ def income_vs_expense_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def category_breakdown_report(request):
     """
     Category Breakdown Report
@@ -197,9 +205,10 @@ def category_breakdown_report(request):
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
-        # Get user's transactions
+        # Get user's transactions (authenticated user)
+        user_id = request.user.id
         transactions = Transaction.objects.filter(
-            owner=request.user,
+            receipt__owner_id=user_id,
             transaction_date__gte=start_date,
             transaction_date__lte=end_date,
             transaction_type=transaction_type
@@ -207,11 +216,8 @@ def category_breakdown_report(request):
         
         # Group by category
         category_data = transactions.values('category').annotate(
-            total_amount=Sum('total_amount'),
-            transaction_count=Count('id'),
-            avg_amount=Avg('total_amount'),
-            max_amount=Max('total_amount'),
-            min_amount=Min('total_amount')
+            total_amount=Sum('total_amount', output_field=DecimalField()),
+            transaction_count=Count('id')
         ).order_by('-total_amount')[:limit]
         
         # Calculate total for percentage calculation
@@ -222,6 +228,8 @@ def category_breakdown_report(request):
         for cat_data in category_data:
             amount = float(cat_data['total_amount'])
             percentage = (amount / float(total_amount)) * 100 if total_amount > 0 else 0
+            count = cat_data['transaction_count']
+            avg_amount = amount / count if count > 0 else 0
             
             categories.append({
                 'category': cat_data['category'],
@@ -230,26 +238,11 @@ def category_breakdown_report(request):
                 ),
                 'total_amount': amount,
                 'percentage': round(percentage, 2),
-                'transaction_count': cat_data['transaction_count'],
-                'avg_amount': round(float(cat_data['avg_amount']), 2),
-                'max_amount': float(cat_data['max_amount']),
-                'min_amount': float(cat_data['min_amount'])
+                'transaction_count': count,
+                'avg_amount': round(avg_amount, 2)
             })
         
-        # Get top vendors for context
-        top_vendors = transactions.values('vendor_name').annotate(
-            total_amount=Sum('total_amount'),
-            transaction_count=Count('id')
-        ).order_by('-total_amount')[:10]
-        
-        vendor_data = []
-        for vendor in top_vendors:
-            vendor_data.append({
-                'vendor': vendor['vendor_name'],
-                'total_amount': float(vendor['total_amount']),
-                'transaction_count': vendor['transaction_count'],
-                'percentage': (float(vendor['total_amount']) / float(total_amount)) * 100 if total_amount > 0 else 0
-            })
+        vendor_data = []  # Simplified for now
         
         return Response({
             'report_type': 'category_breakdown',
@@ -280,7 +273,7 @@ def category_breakdown_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def tax_deductible_report(request):
     """
     Tax-Deductible Expenses Report
@@ -298,6 +291,7 @@ def tax_deductible_report(request):
     
     Query Parameters:
     - tax_year: YYYY (default: current year)
+    - tax_rate: decimal (0.0-1.0) for tax savings calculation (default: from settings)
     - include_categories: comma-separated list of categories to include
     - exclude_categories: comma-separated list of categories to exclude
     """
@@ -306,6 +300,19 @@ def tax_deductible_report(request):
         tax_year = request.GET.get('tax_year')
         include_categories = request.GET.get('include_categories', '').split(',') if request.GET.get('include_categories') else []
         exclude_categories = request.GET.get('exclude_categories', '').split(',') if request.GET.get('exclude_categories') else []
+        
+        # Get tax rate (can be overridden via query parameter)
+        tax_rate_param = request.GET.get('tax_rate')
+        if tax_rate_param:
+            try:
+                tax_rate = float(tax_rate_param)
+                # Validate tax rate is reasonable (0-100%)
+                if tax_rate < 0 or tax_rate > 1:
+                    raise ValueError("Tax rate must be between 0 and 1")
+            except (ValueError, TypeError):
+                tax_rate = getattr(settings, 'DEFAULT_TAX_RATE', 0.25)
+        else:
+            tax_rate = getattr(settings, 'DEFAULT_TAX_RATE', 0.25)
         
         # Set tax year (default to current year)
         if not tax_year:
@@ -331,7 +338,7 @@ def tax_deductible_report(request):
         end_date = datetime(tax_year, 12, 31).date()
         
         transactions = Transaction.objects.filter(
-            owner=request.user,
+            receipt__owner_id=request.user.id,  # Use authenticated user
             transaction_type='expense',
             transaction_date__gte=start_date,
             transaction_date__lte=end_date,
@@ -340,17 +347,21 @@ def tax_deductible_report(request):
         
         # Group by category
         category_breakdown = transactions.values('category').annotate(
-            total_amount=Sum('total_amount'),
-            transaction_count=Count('id'),
-            avg_amount=Avg('total_amount')
+            total_amount=Sum('total_amount', output_field=DecimalField()),
+            transaction_count=Count('id')
         ).order_by('-total_amount')
         
+        # Calculate total deductible amount using database aggregation
+        total_deductible = float(transactions.aggregate(
+            total=Sum('total_amount', output_field=DecimalField())
+        )['total'] or 0)
+        
         deductible_expenses = []
-        total_deductible = 0
         
         for cat_data in category_breakdown:
             amount = float(cat_data['total_amount'])
-            total_deductible += amount
+            count = cat_data['transaction_count']
+            avg_amount = amount / count if count > 0 else 0
             
             deductible_expenses.append({
                 'category': cat_data['category'],
@@ -358,8 +369,8 @@ def tax_deductible_report(request):
                     cat_data['category'], cat_data['category']
                 ),
                 'total_amount': amount,
-                'transaction_count': cat_data['transaction_count'],
-                'avg_amount': round(float(cat_data['avg_amount']), 2),
+                'transaction_count': count,
+                'avg_amount': round(avg_amount, 2),
                 'is_deductible': True
             })
         
@@ -381,7 +392,7 @@ def tax_deductible_report(request):
         
         # Get all transactions for this user in the tax year for context
         all_expenses = Transaction.objects.filter(
-            owner=request.user,
+            receipt__owner_id=request.user.id,  # Use authenticated user
             transaction_type='expense',
             transaction_date__gte=start_date,
             transaction_date__lte=end_date
@@ -411,7 +422,9 @@ def tax_deductible_report(request):
             'category_breakdown': deductible_expenses,
             'monthly_breakdown': monthly_data,
             'tax_guidance': {
-                'estimated_tax_savings': total_deductible * 0.25,  # Rough 25% tax rate estimate
+                'estimated_tax_savings': total_deductible * tax_rate,
+                'tax_rate': tax_rate,
+                'tax_rate_percentage': round(tax_rate * 100, 1),
                 'note': 'Consult with a tax professional for accurate deduction calculations'
             },
             'generated_at': timezone.now().isoformat()
@@ -425,7 +438,7 @@ def tax_deductible_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def vendor_analysis_report(request):
     """
     Vendor Spend Analysis Report
@@ -463,20 +476,19 @@ def vendor_analysis_report(request):
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
-        # Get user's transactions
+        # Get user's transactions (authenticated user)
+        user_id = request.user.id
         transactions = Transaction.objects.filter(
-            owner=request.user,
+            receipt__owner_id=user_id,
             transaction_date__gte=start_date,
             transaction_date__lte=end_date
         )
         
         # Group by vendor
         vendor_analysis = transactions.values('vendor_name').annotate(
-            total_spent=Sum('total_amount'),
+            total_spent=Sum('total_amount', output_field=DecimalField()),
             transaction_count=Count('id'),
-            avg_transaction=Avg('total_amount'),
-            max_transaction=Max('total_amount'),
-            min_transaction=Min('total_amount'),
+            avg_transaction=Avg('total_amount', output_field=DecimalField()),
             first_transaction=Min('transaction_date'),
             last_transaction=Max('transaction_date')
         ).filter(
@@ -495,14 +507,16 @@ def vendor_analysis_report(request):
             days_active = (vendor['last_transaction'] - vendor['first_transaction']).days + 1
             frequency_per_month = (vendor['transaction_count'] / (days_active / 30.44)) if days_active > 0 else 0
             
+            # Use database-calculated average transaction
+            count = vendor['transaction_count']
+            avg_transaction = float(vendor['avg_transaction']) if vendor['avg_transaction'] else 0
+            
             vendor_data.append({
                 'vendor_name': vendor['vendor_name'],
                 'total_spent': total_spent,
                 'percentage_of_total': round(percentage, 2),
-                'transaction_count': vendor['transaction_count'],
-                'avg_transaction': round(float(vendor['avg_transaction']), 2),
-                'max_transaction': float(vendor['max_transaction']),
-                'min_transaction': float(vendor['min_transaction']),
+                'transaction_count': count,
+                'avg_transaction': round(avg_transaction, 2),
                 'first_transaction': vendor['first_transaction'].isoformat(),
                 'last_transaction': vendor['last_transaction'].isoformat(),
                 'frequency_per_month': round(frequency_per_month, 1),
@@ -514,7 +528,7 @@ def vendor_analysis_report(request):
         category_patterns = transactions.filter(
             vendor_name__in=top_vendor_names
         ).values('vendor_name', 'category').annotate(
-            total_amount=Sum('total_amount'),
+            total_amount=Sum('total_amount', output_field=DecimalField()),
             transaction_count=Count('id')
         ).order_by('vendor_name', '-total_amount')
         
@@ -586,7 +600,7 @@ def vendor_analysis_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def audit_log_report(request):
     """
     Receipt Audit Log Report
@@ -622,9 +636,10 @@ def audit_log_report(request):
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
-        # Get user's receipts
+        # Get user's receipts (authenticated user)
+        user_id = request.user.id
         receipts = Receipt.objects.filter(
-            owner=request.user,
+            owner_id=user_id,
             uploaded_at__date__gte=start_date,
             uploaded_at__date__lte=end_date
         )
@@ -687,8 +702,8 @@ def audit_log_report(request):
             
             audit_entries.append(entry)
         
-        # Calculate summary statistics
-        total_receipts = len(audit_entries)
+        # Calculate summary statistics using database aggregation
+        total_receipts = receipts.count()
         status_breakdown = receipts.values('ocr_status').annotate(
             count=Count('id')
         ).order_by('ocr_status')
@@ -774,7 +789,7 @@ def audit_log_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated])
 def report_summary(request):
     """
     Reports Summary Dashboard
@@ -789,9 +804,10 @@ def report_summary(request):
         current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
         
-        # Get user's data
-        receipts = Receipt.objects.filter(owner=request.user)
-        transactions = Transaction.objects.filter(owner=request.user)
+        # Get user's data (authenticated user)
+        user_id = request.user.id
+        receipts = Receipt.objects.filter(owner_id=user_id)
+        transactions = Transaction.objects.filter(receipt__owner_id=user_id)
         
         # Quick metrics
         total_receipts = receipts.count()

@@ -407,3 +407,6 @@ if 'DYNO' in os.environ:
     }
 else:
     HEROKU_DEPLOYMENT = False
+
+# Tax Settings
+DEFAULT_TAX_RATE = float(os.environ.get('DEFAULT_TAX_RATE', '0.25'))  # 25% default

@@ -360,3 +360,10 @@ requirements-docker.txt
 test_openai_compatibility.py
 requirements-docker-minimal.txt
 requirements-docker-minimal.txt
+CRITICAL_SECURITY_FIX.md
+DJANGO_ORM_OPTIMIZATIONS.md
+.gitignore
+FRONTEND_SECURITY_COMPLETE.md
+FRONTEND_SECURITY_AUDIT.md
+.gitignore
+.gitignore

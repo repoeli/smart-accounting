@@ -41,6 +41,10 @@ import WidgetDemoPage from '../pages/demo/WidgetDemoPage';
 // Settings Pages
 import SettingsPage from '../pages/settings/SettingsPage';
 
+// Reports Pages
+import ReportsPage from '../components/reports/ReportsPage';
+import ReportsTestPage from '../components/reports/ReportsTestPage';
+
 // Debug/Test Components (development only)
 import TokenDebug from '../components/debug/TokenDebug';
 import SimpleTokenTest from '../components/test/SimpleTokenTest';
@@ -133,6 +137,11 @@ function AppRoutes() {
         
         {/* Receipt Test Page - Production Testing */}
         <Route path="/receipts/test" element={<ReceiptTestPage />} />
+        
+        {/* Reports */}
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports/:reportType" element={<ReportsPage />} />
+        <Route path="/reports-test" element={<ReportsTestPage />} />
         
         {/* Demo Pages */}
         <Route path="/demo/widgets" element={<WidgetDemoPage />} />

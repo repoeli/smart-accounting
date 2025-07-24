@@ -1,4 +1,5 @@
 import axios from 'axios';
+import tokenStorage from '../services/storage/tokenStorage';
 
 // Create axios instance
 const axiosInstance = axios.create({
@@ -37,7 +38,7 @@ const refreshToken = async () => {
     return refreshTokenPromise;
   }
 
-  const refreshToken = localStorage.getItem('refreshToken');
+  const refreshToken = tokenStorage.getRefreshToken();
   if (!refreshToken) {
     return null;
   }
@@ -48,17 +49,16 @@ const refreshToken = async () => {
     { refresh: refreshToken }
   )
     .then(response => {
-      localStorage.setItem('accessToken', response.data.access);
+      tokenStorage.setAccessToken(response.data.access);
       // If we got a new refresh token, store it
       if (response.data.refresh) {
-        localStorage.setItem('refreshToken', response.data.refresh);
+        tokenStorage.setRefreshToken(response.data.refresh);
       }
       return response.data.access;
     })
     .catch(error => {
       console.error('Token refresh failed:', error);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
+      tokenStorage.clearTokens();
       return null;
     })
     .finally(() => {
@@ -87,7 +87,7 @@ axiosInstance.interceptors.request.use(
     }
 
     // Get the token
-    let token = localStorage.getItem('accessToken');
+    let token = tokenStorage.getAccessToken();
 
     // If token is expired, try to refresh it
     if (token && isTokenExpired(token)) {
