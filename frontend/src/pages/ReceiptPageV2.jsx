@@ -34,7 +34,7 @@ import {
   ReceiptVendorInfo,
   ReceiptFinancialBreakdown,
   ReceiptPerformanceMetrics,
-  ReceiptListV2 as ReceiptList,
+  ReceiptListV2,
   ReceiptFilterPanel,
   ReceiptAnalyticsDashboard
 } from '../components/receipts/v2';
@@ -183,7 +183,8 @@ const ReceiptPageV2 = () => {
 
   const handleUpdateReceipt = async (receiptId, updateData) => {
     try {
-      const response = await receiptService.updateReceipt(receiptId, updateData);
+      console.log('🔍 ReceiptPageV2: Updating receipt with data:', updateData);
+      const response = await receiptService.updateExtractedData(receiptId, updateData);
       const updatedReceipt = response.data || response;
       setSelectedReceipt(updatedReceipt);
       // Update the receipt in the local list
@@ -417,7 +418,7 @@ const ReceiptPageV2 = () => {
         {/* List View */}
         <Slide direction="right" in={currentView === 'list'} mountOnEnter unmountOnExit timeout={300}>
           <div className="receipts-content-box receipts-list-section">
-            <ReceiptList
+            <ReceiptListV2
               onReceiptSelect={handleReceiptSelect}
               onUpload={handleNavigateToUpload}
               receipts={receipts}

@@ -749,7 +749,11 @@ class EnhancedReceiptService {
    */
   async updateReceipt(receiptId, data) {
     try {
+      console.log('🔍 enhancedReceiptService DEBUG: Updating receipt', receiptId, 'with data:', data);
+      
       const response = await api.patch(`/receipts/${receiptId}/`, data);
+      
+      console.log('🔍 enhancedReceiptService DEBUG: Update response:', response.data);
       
       // Update cache
       const cacheKey = `receipt_${receiptId}`;
@@ -764,7 +768,8 @@ class EnhancedReceiptService {
         message: 'Receipt updated successfully'
       };
     } catch (error) {
-      console.error('Failed to update receipt:', error);
+      console.error('🔍 enhancedReceiptService DEBUG: Failed to update receipt:', error);
+      console.error('🔍 enhancedReceiptService DEBUG: Error response:', error.response?.data);
       return {
         success: false,
         error: this.parseError(error)

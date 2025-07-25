@@ -40,10 +40,11 @@ class APIUsageStatsSerializer(serializers.ModelSerializer):
 
 class ReceiptSerializer(serializers.ModelSerializer):
     """
-    Serializer for Receipt with new OpenAI OCR schema support.
+    Serializer for Receipt with new OpenAI OCR schema support and Cloudinary integration.
     Handles flat semantic structure and Decimal serialization.
     """
     transaction = TransactionSerializer(read_only=True)
+    image_info = serializers.SerializerMethodField()
     
     class Meta:
         model = Receipt
@@ -51,13 +52,23 @@ class ReceiptSerializer(serializers.ModelSerializer):
             'id', 'owner', 'file', 'original_filename', 'uploaded_at', 'updated_at',
             'ocr_status', 'ocr_confidence', 'is_auto_approved', 'is_manually_verified',
             'verified_by', 'verified_at', 'extracted_data', 'processing_metadata',
-            'processing_errors', 'transaction'
+            'processing_errors', 'transaction', 'image_info',
+            # Cloudinary fields
+            'cloudinary_public_id', 'cloudinary_url', 'cloudinary_display_url',
+            'cloudinary_thumbnail_url', 'image_width', 'image_height', 'file_size_bytes'
         ]
         read_only_fields = [
             'id', 'owner', 'original_filename', 'uploaded_at', 'updated_at',
             'ocr_status', 'ocr_confidence', 'is_auto_approved', 'extracted_data',
-            'processing_metadata', 'processing_errors'
+            'processing_metadata', 'processing_errors', 'image_info',
+            # Cloudinary fields are managed by the service
+            'cloudinary_public_id', 'cloudinary_url', 'cloudinary_display_url',
+            'cloudinary_thumbnail_url', 'image_width', 'image_height', 'file_size_bytes'
         ]
+    
+    def get_image_info(self, obj):
+        """Get comprehensive image information including optimized URLs"""
+        return obj.image_info
     
     def to_representation(self, instance):
         """

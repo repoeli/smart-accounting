@@ -16,13 +16,13 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer
 from .services.openai_service import process_receipt
+from .services.cloudinary_service import cloudinary_service
 from .utils import DecimalEncoder
-from .pagination import ReceiptPagination
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +51,11 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ReceiptSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    permission_classes = [AllowAny]  # Temporarily for testing
-    pagination_class = ReceiptPagination  # Use custom pagination
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Filter receipts by owner"""
-        return Receipt.objects.all().order_by('-uploaded_at')  # Show all for testing
+        """Filter receipts by user"""
+        return Receipt.objects.filter(owner=self.request.user).order_by('-uploaded_at')
 
     @method_decorator(csrf_exempt)
     def dispatch(self, request, *args, **kwargs):
@@ -80,24 +79,13 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 )
 
             image_file = request.FILES['image']
-            description = request.data.get('description', '')
+            description = getattr(request, 'data', {}).get('description', '') or request.POST.get('description', '')
 
-            # Validate file type - handle both .jpg and .jpeg properly
+            # Validate file type
             allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-            logger.info(f"File content type: {image_file.content_type}")
-            logger.info(f"File name: {image_file.name}")
-            
-            # Get file extension
-            file_ext = image_file.name.lower().split('.')[-1] if '.' in image_file.name else ''
-            allowed_extensions = ['jpg', 'jpeg', 'png', 'webp']
-            
-            # Accept if either content type OR extension is valid
-            content_type_valid = image_file.content_type in allowed_types
-            extension_valid = file_ext in allowed_extensions
-            
-            if not (content_type_valid or extension_valid):
+            if image_file.content_type not in allowed_types:
                 return Response(
-                    {'error': f'Invalid file. Content-Type: {image_file.content_type}, Extension: {file_ext}. Allowed: {allowed_extensions}'},
+                    {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -108,33 +96,72 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Create receipt record
-            # For testing without auth, use a default owner if available
-            from accounts.models import Account
-            owner = Account.objects.first() if Account.objects.exists() else None
-            
+            # Create receipt record with initial data
             receipt = Receipt.objects.create(
-                owner=owner,
-                file=image_file,
+                owner=request.user,
+                file=image_file,  # Keep local storage as backup
                 original_filename=image_file.name,
                 ocr_status='processing'
             )
 
+            # Upload to Cloudinary with optimization
+            cloudinary_success = False
+            try:
+                if cloudinary_service.is_configured:
+                    cloudinary_result = cloudinary_service.upload_receipt_image(
+                        file=image_file,
+                        receipt_id=receipt.id,
+                        user_id=request.user.id,
+                        filename=image_file.name
+                    )
+                    
+                    # Update receipt with Cloudinary data
+                    receipt.cloudinary_public_id = cloudinary_result['public_id']
+                    receipt.cloudinary_url = cloudinary_result['original_url']
+                    receipt.cloudinary_display_url = cloudinary_result['urls'].get('display', cloudinary_result['original_url'])
+                    receipt.cloudinary_thumbnail_url = cloudinary_result['urls'].get('thumbnail', cloudinary_result['original_url'])
+                    receipt.image_width = cloudinary_result.get('width')
+                    receipt.image_height = cloudinary_result.get('height')
+                    receipt.file_size_bytes = cloudinary_result.get('size_bytes')
+                    cloudinary_success = True
+                    
+                    logger.info(f"Successfully uploaded receipt {receipt.id} to Cloudinary: {cloudinary_result['public_id']}")
+                else:
+                    logger.info(f"Cloudinary not configured, using local storage for receipt {receipt.id}")
+                    
+            except Exception as cloudinary_error:
+                logger.warning(f"Cloudinary upload failed for receipt {receipt.id}: {cloudinary_error}")
+                # Local storage is already set as backup
+                logger.info(f"Falling back to local storage for receipt {receipt.id}")
+            
+            receipt.save()
+
             # Process with OpenAI Vision API
             try:
-                # Save image to temporary file for processing
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{image_file.name.split(".")[-1]}') as temp_file:
-                    for chunk in image_file.chunks():
-                        temp_file.write(chunk)
-                    temp_file.flush()
-
-                    # Process receipt asynchronously
+                # Use Cloudinary URL if available, otherwise use local file
+                if cloudinary_success and receipt.cloudinary_url:
+                    # Process using Cloudinary URL directly
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        result = loop.run_until_complete(process_receipt(temp_file.name))
+                        result = loop.run_until_complete(process_receipt(receipt.cloudinary_url, use_url=True))
                     finally:
                         loop.close()
+                else:
+                    # Process using temp file from local storage
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{image_file.name.split(".")[-1]}') as temp_file:
+                        image_file.seek(0)
+                        for chunk in image_file.chunks():
+                            temp_file.write(chunk)
+                        temp_file.flush()
+                        
+                        # Process receipt asynchronously
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            result = loop.run_until_complete(process_receipt(temp_file.name))
+                        finally:
+                            loop.close()
 
                 # Update receipt with extracted data
                 receipt.extracted_data = result.get('extracted_data', {})
@@ -148,18 +175,14 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     try:
                         total_amount = Decimal(str(extracted_data['total']))
                         transaction_type = extracted_data.get('type', 'expense')
-                        transaction_date = self._parse_date(extracted_data.get('date'))
                         
-                        # For testing without auth, use the same owner as receipt
                         Transaction.objects.create(
                             receipt=receipt,
-                            owner=receipt.owner,
+                            owner=request.user,
                             total_amount=total_amount,
                             transaction_type=transaction_type,
                             vendor_name=extracted_data.get('vendor', 'Unknown'),
-                            transaction_date=transaction_date,
-                            currency=extracted_data.get('currency', 'GBP'),
-                            tax_amount=Decimal(str(extracted_data.get('tax', 0))) if extracted_data.get('tax') else None
+                            transaction_date=self._parse_date(extracted_data.get('date'))
                         )
                     except (InvalidOperation, ValueError) as e:
                         logger.warning(f"Could not create transaction for receipt {receipt.id}: {e}")
@@ -198,28 +221,28 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         """
         receipt = self.get_object()
         
-        if not receipt.image:
+        if not receipt.file:
             return Response(
                 {'error': 'No image available for reprocessing'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            receipt.status = 'processing'
+            receipt.ocr_status = 'processing'
             receipt.save()
 
             # Process with OpenAI Vision API
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(process_receipt(receipt.image.path))
+                result = loop.run_until_complete(process_receipt(receipt.file.path))
             finally:
                 loop.close()
 
             # Update receipt with new extracted data
             receipt.extracted_data = result.get('extracted_data', {})
             receipt.processing_metadata = result.get('processing_metadata', {})
-            receipt.status = 'processed'
+            receipt.ocr_status = 'completed'
             receipt.save()
 
             # Update or create transaction
@@ -233,10 +256,10 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     transaction, created = Transaction.objects.update_or_create(
                         receipt=receipt,
                         defaults={
-                            'amount': total_amount,
+                            'total_amount': total_amount,
                             'transaction_type': transaction_type,
-                            'merchant_name': extracted_data.get('vendor', 'Unknown'),
-                            'date': self._parse_date(extracted_data.get('date'))
+                            'vendor_name': extracted_data.get('vendor', 'Unknown'),
+                            'transaction_date': self._parse_date(extracted_data.get('date'))
                         }
                     )
                 except (InvalidOperation, ValueError) as e:
@@ -247,7 +270,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             logger.error(f"Reprocessing failed for receipt {receipt.id}: {e}")
-            receipt.status = 'failed'
+            receipt.ocr_status = 'failed'
             receipt.processing_metadata = {
                 'error': str(e),
                 'processing_time': 0,
@@ -279,29 +302,44 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         """
         receipt = self.get_object()
         
+        # Debug logging
+        print(f"🔍 DEBUG: Received update request for receipt {receipt.id}")
+        print(f"🔍 DEBUG: Request data: {request.data}")
+        print(f"🔍 DEBUG: Current extracted_data: {receipt.extracted_data}")
+        
         if not receipt.extracted_data:
             receipt.extracted_data = {}
         
         # Update extracted data with provided corrections
         for field in ['vendor', 'date', 'total', 'tax', 'type', 'currency']:
             if field in request.data:
-                receipt.extracted_data[field] = request.data[field]
+                old_value = receipt.extracted_data.get(field)
+                new_value = request.data[field]
+                receipt.extracted_data[field] = new_value
+                print(f"🔍 DEBUG: Updated {field}: {old_value} -> {new_value}")
         
         receipt.save()
+        print(f"🔍 DEBUG: Receipt saved with extracted_data: {receipt.extracted_data}")
 
         # Update associated transaction if total changed
-        if 'total' in request.data or 'type' in request.data or 'vendor' in request.data or 'date' in request.data:
+        if 'total' in request.data or 'type' in request.data or 'vendor' in request.data or 'date' in request.data or 'category' in request.data:
             try:
                 transaction = Transaction.objects.get(receipt=receipt)
                 
                 if 'total' in request.data:
-                    transaction.amount = Decimal(str(request.data['total']))
+                    transaction.total_amount = Decimal(str(request.data['total']))
                 if 'type' in request.data:
                     transaction.transaction_type = request.data['type']
                 if 'vendor' in request.data:
-                    transaction.merchant_name = request.data['vendor']
+                    transaction.vendor_name = request.data['vendor']
                 if 'date' in request.data:
-                    transaction.date = self._parse_date(request.data['date'])
+                    transaction.transaction_date = self._parse_date(request.data['date'])
+                if 'category' in request.data:
+                    transaction.category = request.data['category']
+                    print(f"🔍 DEBUG: Updated transaction category to: {request.data['category']}")
+                
+                transaction.save()
+                print(f"🔍 DEBUG: Transaction saved with category: {transaction.category}")
                 
                 transaction.save()
             except Transaction.DoesNotExist:
@@ -310,123 +348,17 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 if extracted_data.get('total'):
                     Transaction.objects.create(
                         receipt=receipt,
-                        user=request.user,
-                        amount=Decimal(str(extracted_data['total'])),
+                        owner=request.user,
+                        total_amount=Decimal(str(extracted_data['total'])),
                         transaction_type=extracted_data.get('type', 'expense'),
-                        merchant_name=extracted_data.get('vendor', 'Unknown'),
-                        date=self._parse_date(extracted_data.get('date'))
+                        vendor_name=extracted_data.get('vendor', 'Unknown'),
+                        transaction_date=self._parse_date(extracted_data.get('date'))
                     )
             except (InvalidOperation, ValueError) as e:
                 logger.warning(f"Could not update transaction for receipt {receipt.id}: {e}")
 
         serializer = self.get_serializer(receipt)
         return Response(serializer.data)
-
-    @action(detail=False, methods=['get'])
-    def dashboard(self, request):
-        """
-        Get dashboard metrics for authenticated user.
-        
-        Returns comprehensive metrics for the dashboard including:
-        - Total receipts processed
-        - Financial totals and breakdowns
-        - Recent income/expense receipts
-        - Pending receipts count
-        - Monthly statistics
-        """
-        from datetime import datetime, timedelta
-        from django.utils import timezone
-        
-        # Get user's receipts and transactions
-        receipts = self.get_queryset()
-        transactions = Transaction.objects.filter(receipt__in=receipts)
-        
-        # Calculate date range for "this month"
-        now = timezone.now()
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        # Basic receipt metrics
-        total_receipts = receipts.count()
-        completed_receipts = receipts.filter(ocr_status='completed').count()
-        failed_receipts = receipts.filter(ocr_status='failed').count()
-        pending_receipts = receipts.filter(ocr_status__in=['processing', 'queued']).count()
-        
-        # Financial metrics from transactions
-        all_transactions = transactions.filter(total_amount__isnull=False)
-        total_amount = all_transactions.aggregate(
-            total=Sum('total_amount')
-        )['total'] or Decimal('0')
-        
-        # This month metrics
-        monthly_receipts = receipts.filter(uploaded_at__gte=month_start).count()
-        monthly_transactions = transactions.filter(
-            receipt__uploaded_at__gte=month_start,
-            total_amount__isnull=False
-        )
-        monthly_total = monthly_transactions.aggregate(
-            total=Sum('total_amount')
-        )['total'] or Decimal('0')
-        
-        # Recent income receipts (last 5)
-        income_receipts = receipts.filter(
-            extracted_data__type='income',
-            ocr_status='completed'
-        ).order_by('-uploaded_at')[:5]
-        
-        # Recent expense receipts (last 5)
-        expense_receipts = receipts.filter(
-            extracted_data__type='expense',
-            ocr_status='completed'
-        ).order_by('-uploaded_at')[:5]
-        
-        # Format receipt data for frontend
-        def format_receipt_for_dashboard(receipt):
-            extracted_data = receipt.extracted_data or {}
-            return {
-                'id': receipt.id,
-                'vendor': extracted_data.get('vendor', 'Unknown Vendor'),
-                'amount': float(extracted_data.get('total', 0)),
-                'currency': extracted_data.get('currency', 'GBP'),
-                'date': receipt.uploaded_at.isoformat(),
-                'formatted_amount': f"{extracted_data.get('currency', 'GBP')} {extracted_data.get('total', 0):.2f}"
-            }
-        
-        income_data = [format_receipt_for_dashboard(r) for r in income_receipts]
-        expense_data = [format_receipt_for_dashboard(r) for r in expense_receipts]
-        
-        return Response({
-            'totalReceipts': total_receipts,
-            'totalAmount': float(total_amount),
-            'monthlyReceipts': monthly_receipts,
-            'monthlyTotal': float(monthly_total),
-            'pendingReceipts': pending_receipts,
-            'incomeReceipts': income_data,
-            'expenseReceipts': expense_data,
-            'success_rate': round(completed_receipts / total_receipts * 100, 1) if total_receipts > 0 else 0,
-            'processing_stats': {
-                'completed': completed_receipts,
-                'failed': failed_receipts,
-                'pending': pending_receipts,
-                'total': total_receipts
-            }
-        })
-
-    @action(detail=False, methods=['get'])
-    def debug_count(self, request):
-        """
-        Debug endpoint to check receipt counts and pagination
-        """
-        queryset = self.get_queryset()
-        page_size = request.GET.get('page_size', 100)
-        
-        return Response({
-            'total_receipts_in_db': queryset.count(),
-            'requested_page_size': page_size,
-            'pagination_class': str(self.pagination_class),
-            'queryset_count': queryset.count(),
-            'first_5_ids': list(queryset.values_list('id', flat=True)[:5]),
-            'last_5_ids': list(queryset.values_list('id', flat=True).order_by('-id')[:5])
-        })
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -437,31 +369,31 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         
         # Basic counts
         total_receipts = receipts.count()
-        processed_receipts = receipts.filter(status='processed').count()
-        failed_receipts = receipts.filter(status='failed').count()
+        processed_receipts = receipts.filter(ocr_status='completed').count()
+        failed_receipts = receipts.filter(ocr_status='failed').count()
         
         # Financial summary from transactions
-        transactions = Transaction.objects.filter(user=request.user)
+        transactions = Transaction.objects.filter(owner=request.user)
         total_expenses = transactions.filter(transaction_type='expense').aggregate(
-            total=Sum('amount')
+            total=Sum('total_amount')
         )['total'] or Decimal('0')
         
         total_income = transactions.filter(transaction_type='income').aggregate(
-            total=Sum('amount')
+            total=Sum('total_amount')
         )['total'] or Decimal('0')
         
-        avg_amount = transactions.aggregate(avg=Avg('amount'))['avg'] or Decimal('0')
+        avg_amount = transactions.aggregate(avg=Avg('total_amount'))['avg'] or Decimal('0')
         
         # Category breakdown
-        category_stats = transactions.values('merchant_name').annotate(
+        category_stats = transactions.values('vendor_name').annotate(
             count=Count('id'),
-            total=Sum('amount')
+            total=Sum('total_amount')
         ).order_by('-total')[:10]
         
         # Type breakdown
         type_stats = transactions.values('transaction_type').annotate(
             count=Count('id'),
-            total=Sum('amount')
+            total=Sum('total_amount')
         )
 
         return Response({
@@ -479,6 +411,78 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             },
             'category_breakdown': list(category_stats),
             'type_breakdown': list(type_stats)
+        })
+
+    @action(detail=False, methods=['get'])
+    def dashboard(self, request):
+        """Get dashboard metrics for the user"""
+        try:
+            # Get user's receipts
+            receipts = self.get_queryset()
+            total_receipts = receipts.count()
+            
+            # Get user's transactions
+            transactions = Transaction.objects.filter(receipt__owner=request.user)
+            
+            # Calculate totals
+            total_expenses = transactions.filter(
+                transaction_type='expense'
+            ).aggregate(total=Sum('total_amount'))['total'] or 0
+            
+            total_income = transactions.filter(
+                transaction_type='income'
+            ).aggregate(total=Sum('total_amount'))['total'] or 0
+            
+            # Recent activity
+            recent_receipts = receipts[:5]
+            recent_transactions = transactions.order_by('-updated_at')[:5]
+            
+            # Monthly summary (last 6 months)
+            from django.db.models.functions import TruncMonth
+            from django.utils import timezone
+            from dateutil.relativedelta import relativedelta
+            
+            six_months_ago = timezone.now() - relativedelta(months=6)
+            monthly_data = transactions.filter(
+                updated_at__gte=six_months_ago
+            ).annotate(
+                month=TruncMonth('transaction_date')
+            ).values('month').annotate(
+                count=Count('id'),
+                total_expenses=Sum('total_amount', filter=Q(transaction_type='expense')),
+                total_income=Sum('total_amount', filter=Q(transaction_type='income'))
+            ).order_by('-month')[:6]
+            
+            return Response({
+                'total_receipts': total_receipts,
+                'total_expenses': float(total_expenses),
+                'total_income': float(total_income),
+                'net_income': float(total_income - total_expenses),
+                'recent_receipts': ReceiptSerializer(recent_receipts, many=True).data,
+                'recent_transactions': TransactionSerializer(recent_transactions, many=True).data,
+                'monthly_summary': list(monthly_data)
+            })
+            
+        except Exception as e:
+            logger.error(f"Dashboard error for user {request.user.id}: {str(e)}")
+            return Response({
+                'total_receipts': 0,
+                'total_expenses': 0,
+                'total_income': 0,
+                'net_income': 0,
+                'recent_receipts': [],
+                'recent_transactions': [],
+                'monthly_summary': []
+            })
+
+    @action(detail=False, methods=['get'])
+    def test_auth(self, request):
+        """Simple test endpoint to verify authentication is working"""
+        return Response({
+            'authenticated': True,
+            'user_id': request.user.id,
+            'user_email': request.user.email,
+            'message': 'Authentication is working correctly'
         })
 
     def _parse_date(self, date_str):
@@ -506,18 +510,15 @@ class TransactionViewSet(viewsets.ModelViewSet):
     ViewSet for managing transactions.
     """
     serializer_class = TransactionSerializer
-    permission_classes = [AllowAny]  # Temporarily for testing
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Filter transactions by owner"""
-        return Transaction.objects.all().order_by('-transaction_date')  # Show all for testing
+        """Filter transactions by user"""
+        return Transaction.objects.filter(owner=self.request.user).order_by('-transaction_date')
 
     def perform_create(self, serializer):
-        """Ensure owner is set when creating transaction"""
-        # For testing without auth, use a default owner if available
-        from accounts.models import Account
-        owner = Account.objects.first() if Account.objects.exists() else None
-        serializer.save(owner=owner)
+        """Ensure user is set when creating transaction"""
+        serializer.save(owner=self.request.user)
 
     @action(detail=False, methods=['get'])
     def by_category(self, request):
@@ -525,10 +526,10 @@ class TransactionViewSet(viewsets.ModelViewSet):
         transactions = self.get_queryset()
         
         # Group by merchant
-        merchants = transactions.values('merchant_name').annotate(
+        merchants = transactions.values('vendor_name').annotate(
             count=Count('id'),
-            total_amount=Sum('amount'),
-            avg_amount=Avg('amount')
+            total_amount=Sum('total_amount'),
+            avg_amount=Avg('total_amount')
         ).order_by('-total_amount')
         
         return Response(list(merchants))
@@ -541,8 +542,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
         # Group by type
         types = transactions.values('transaction_type').annotate(
             count=Count('id'),
-            total_amount=Sum('amount'),
-            avg_amount=Avg('amount')
+            total_amount=Sum('total_amount'),
+            avg_amount=Avg('total_amount')
         )
         
         return Response(list(types))
@@ -556,11 +557,11 @@ class TransactionViewSet(viewsets.ModelViewSet):
         
         # Group by month
         monthly_data = transactions.annotate(
-            month=TruncMonth('date')
+            month=TruncMonth('transaction_date')
         ).values('month').annotate(
             count=Count('id'),
-            total_expenses=Sum('amount', filter=Q(transaction_type='expense')),
-            total_income=Sum('amount', filter=Q(transaction_type='income'))
+            total_expenses=Sum('total_amount', filter=Q(transaction_type='expense')),
+            total_income=Sum('total_amount', filter=Q(transaction_type='income'))
         ).order_by('-month')
         
         return Response(list(monthly_data))

@@ -8,15 +8,22 @@ import {
   CircularProgress,
   Alert,
   IconButton,
-  Tooltip
+  Tooltip,
+  Chip,
+  Button
 } from '@mui/material';
 import { 
   TrendingUp, 
   TrendingDown, 
   Receipt, 
   AccountBalance,
-  Refresh
+  Refresh,
+  Assessment,
+  PieChart,
+  BarChart
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
+import { useReportAccess } from '../../hooks/reports/useReportAccess';
 import reportsAPI from '../../services/reports/reportsAPI';
 
 const SummaryWidget = ({ autoRefresh = true, refreshInterval = 30000 }) => {
@@ -24,18 +31,20 @@ const SummaryWidget = ({ autoRefresh = true, refreshInterval = 30000 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const navigate = useNavigate();
+  const { canViewReports, subscription } = useReportAccess();
 
   const fetchSummaryData = async () => {
+    if (!canViewReports) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setError(null);
       const result = await reportsAPI.getSummary();
-      
-      if (result.success) {
-        setSummaryData(result.data);
-        setLastUpdated(new Date());
-      } else {
-        setError(result.error);
-      }
+      setSummaryData(result);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Failed to fetch summary data:', err);
       setError('Failed to load dashboard summary');
@@ -58,9 +67,9 @@ const SummaryWidget = ({ autoRefresh = true, refreshInterval = 30000 }) => {
   }, [autoRefresh, refreshInterval]);
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD'
+      currency: 'GBP'
     }).format(amount || 0);
   };
 
@@ -139,6 +148,32 @@ const SummaryWidget = ({ autoRefresh = true, refreshInterval = 30000 }) => {
 
   const metrics = summaryData?.quick_metrics || {};
   const expenseTrend = calculateTrend(metrics.current_month_expenses, metrics.last_month_expenses);
+
+  // Show subscription prompt if no access
+  if (!canViewReports) {
+    return (
+      <Card>
+        <CardContent>
+          <Box sx={{ textAlign: 'center', py: 3 }}>
+            <Assessment sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              Financial Reports
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Upgrade to Professional to access detailed financial reports and analytics
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => navigate('/subscriptions')}
+              startIcon={<TrendingUp />}
+            >
+              Upgrade Now
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Box>
@@ -222,6 +257,46 @@ const SummaryWidget = ({ autoRefresh = true, refreshInterval = 30000 }) => {
           </Grid>
         </Box>
       )}
+
+      {/* Quick Actions for Reports */}
+      <Box sx={{ mt: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+        <Typography variant="subtitle1" sx={{ mb: 2 }}>
+          Quick Actions
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Chip
+            icon={<Assessment />}
+            label="View All Reports"
+            onClick={() => navigate('/reports')}
+            clickable
+            color="primary"
+            variant="outlined"
+          />
+          <Chip
+            icon={<BarChart />}
+            label="Income vs Expense"
+            onClick={() => navigate('/reports')}
+            clickable
+            variant="outlined"
+          />
+          <Chip
+            icon={<PieChart />}
+            label="Category Breakdown"
+            onClick={() => navigate('/reports')}
+            clickable
+            variant="outlined"
+          />
+          {subscription?.plan === 'platinum' && (
+            <Chip
+              label="Tax Reports"
+              onClick={() => navigate('/reports')}
+              clickable
+              variant="outlined"
+              color="secondary"
+            />
+          )}
+        </Box>
+      </Box>
     </Box>
   );
 };

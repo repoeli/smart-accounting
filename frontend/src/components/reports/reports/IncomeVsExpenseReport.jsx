@@ -51,9 +51,9 @@ const IncomeVsExpenseReport = ({ onBack }) => {
     }
 
     // Use Intl.NumberFormat for proper currency formatting
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'GBP',
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
       ...options

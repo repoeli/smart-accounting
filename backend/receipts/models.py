@@ -17,10 +17,19 @@ class Receipt(models.Model):
     )
     
     # Upload information
-    file = models.FileField(upload_to='receipts/')
+    file = models.FileField(upload_to='receipts/', blank=True, null=True)  # Local storage (optional)
     original_filename = models.CharField(max_length=255)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Cloudinary storage fields
+    cloudinary_public_id = models.CharField(max_length=500, blank=True, null=True)
+    cloudinary_url = models.URLField(blank=True, null=True)
+    cloudinary_display_url = models.URLField(blank=True, null=True)  # Optimized for display
+    cloudinary_thumbnail_url = models.URLField(blank=True, null=True)  # Small thumbnail
+    image_width = models.PositiveIntegerField(blank=True, null=True)
+    image_height = models.PositiveIntegerField(blank=True, null=True)
+    file_size_bytes = models.PositiveIntegerField(blank=True, null=True)
     
     # OCR processing status
     PENDING = 'pending'
@@ -132,6 +141,55 @@ class Receipt(models.Model):
             self.processing_errors = []
         self.processing_errors.append(error_data)
         self.save()
+    
+    def get_image_url(self, optimization='display'):
+        """
+        Get the best available image URL.
+        Prioritizes Cloudinary over local storage.
+        
+        Args:
+            optimization: 'original', 'display', or 'thumbnail'
+        """
+        if optimization == 'original' and self.cloudinary_url:
+            return self.cloudinary_url
+        elif optimization == 'display' and self.cloudinary_display_url:
+            return self.cloudinary_display_url
+        elif optimization == 'thumbnail' and self.cloudinary_thumbnail_url:
+            return self.cloudinary_thumbnail_url
+        elif self.cloudinary_url:
+            # Fallback to original Cloudinary URL
+            return self.cloudinary_url
+        elif self.file:
+            # Fallback to local file
+            return self.file.url
+        else:
+            return None
+    
+    @property
+    def has_cloudinary_image(self):
+        """Check if receipt has Cloudinary image"""
+        return bool(self.cloudinary_public_id and self.cloudinary_url)
+    
+    @property
+    def has_local_image(self):
+        """Check if receipt has local image"""
+        return bool(self.file)
+    
+    @property
+    def image_info(self):
+        """Get comprehensive image information"""
+        return {
+            'has_cloudinary': self.has_cloudinary_image,
+            'has_local': self.has_local_image,
+            'storage_type': 'cloudinary' if self.has_cloudinary_image else 'local',
+            'original_url': self.get_image_url('original'),
+            'display_url': self.get_image_url('display'),
+            'thumbnail_url': self.get_image_url('thumbnail'),
+            'width': self.image_width,
+            'height': self.image_height,
+            'size_bytes': self.file_size_bytes,
+            'public_id': self.cloudinary_public_id
+        }
 
 
 class Transaction(models.Model):

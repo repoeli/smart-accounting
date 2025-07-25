@@ -19,6 +19,7 @@ import ThisMonthCard from '../../components/dashboard/ThisMonthCard';
 import PendingReceiptsCard from '../../components/dashboard/PendingReceiptsCard';
 import RecentIncomeCard from '../../components/dashboard/RecentIncomeCard';
 import RecentExpensesCard from '../../components/dashboard/RecentExpensesCard';
+import SummaryWidget from '../../components/reports/SummaryWidget';
 
 import TokenDebug from '../../components/debug/TokenDebug';
 
@@ -49,21 +50,16 @@ function DashboardPage() {
       // Fetch main dashboard metrics
       const response = await receiptService.getDashboardMetrics();
       
-      if (response.success) {
-        // Map backend response to frontend data structure
-        const backendData = response.data;
-        setDashboardData({
-          totalReceipts: backendData.totalReceipts || 0,
-          totalAmount: backendData.totalAmount || 0,
-          monthlyReceipts: backendData.monthlyReceipts || 0,
-          monthlyTotal: backendData.monthlyTotal || 0,
-          pendingReceipts: backendData.pendingReceipts || 0,
-          incomeReceipts: backendData.incomeReceipts || [],
-          expenseReceipts: backendData.expenseReceipts || []
-        });
-      } else {
-        throw new Error(response.error || 'Failed to fetch dashboard data');
-      }
+      // The API returns data directly, not wrapped in success/data structure
+      setDashboardData({
+        totalReceipts: response.total_receipts || 0,
+        totalAmount: response.total_expenses || 0, // Using expenses as main amount for now
+        monthlyReceipts: response.recent_receipts?.length || 0,
+        monthlyTotal: response.total_expenses || 0,
+        pendingReceipts: 0, // This would need to be calculated from receipt status
+        incomeReceipts: (response.recent_receipts || []).filter(r => r.transaction?.transaction_type === 'income').slice(0, 5),
+        expenseReceipts: (response.recent_receipts || []).filter(r => r.transaction?.transaction_type === 'expense').slice(0, 5)
+      });
 
     } catch (error) {
       console.error('❌ DashboardPage: Failed to fetch dashboard data:', error);
@@ -221,6 +217,13 @@ function DashboardPage() {
           </Box>
         </Box>
       </Box>
+
+      {/* Reports Summary Widget */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <SummaryWidget />
+        </Grid>
+      </Grid>
 
       {/* Main Metrics Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>

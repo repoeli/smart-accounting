@@ -43,9 +43,20 @@ const ReportCard = ({
   height = 'auto',
   className = ''
 }) => {
-  const { canViewReport, getUpgradeMessage, getRequiredPlan } = useReportAccess();
-  const hasAccess = canViewReport(reportType);
-  // Get the actual required access level for this report type, not the user's current level
+  const { canAccessReport, getUpgradeMessage, hasAccess } = useReportAccess();
+  const hasReportAccess = canAccessReport(reportType);
+  // For now, map report types to required plans
+  const getRequiredPlan = (reportType) => {
+    switch (reportType) {
+      case 'tax_deductible':
+      case 'vendor_analysis':
+        return 'professional';
+      case 'audit_log':
+        return 'enterprise';
+      default:
+        return 'basic';
+    }
+  };
   const requiredAccessLevel = getRequiredPlan(reportType);
 
   // Render trend indicator (memoized to prevent unnecessary re-creations)
@@ -73,7 +84,7 @@ const ReportCard = ({
   }, [trend]);
 
   // Render upgrade prompt if no access
-  if (!hasAccess) {
+  if (!hasReportAccess) {
     return (
       <Card className={className} sx={{ height }}>
         <CardHeader
@@ -111,7 +122,7 @@ const ReportCard = ({
               Premium Feature
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {getUpgradeMessage(reportType)}
+              {getUpgradeMessage(requiredAccessLevel)}
             </Typography>
             <Chip 
               label={`Upgrade to ${requiredAccessLevel.charAt(0).toUpperCase() + requiredAccessLevel.slice(1)}`} 

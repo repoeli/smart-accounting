@@ -1,154 +1,174 @@
+/**
+ * Reports API Service
+ * Handles all report-related API calls with subscription-based access control
+ */
+
 import axiosInstance from '../../utils/axiosConfig';
 
-const REPORTS_BASE_URL = '/reports';
-
 class ReportsAPI {
-  // Helper function to build URLSearchParams from filters
-  buildURLParams(filters = {}) {
-    const params = new URLSearchParams();
-    
-    // Handle common filter parameters
-    if (filters.start_date) params.append('start_date', filters.start_date);
-    if (filters.end_date) params.append('end_date', filters.end_date);
-    if (filters.currency) params.append('currency', filters.currency);
-    if (filters.transaction_type) params.append('transaction_type', filters.transaction_type);
-    if (filters.limit) params.append('limit', filters.limit);
-    if (filters.status) params.append('status', filters.status);
-    if (filters.min_transactions) params.append('min_transactions', filters.min_transactions);
-    if (filters.tax_year) params.append('tax_year', filters.tax_year);
-    
-    // Handle boolean parameters (need to check for undefined to allow false values)
-    if (filters.is_business !== undefined) params.append('is_business', filters.is_business);
-    if (filters.include_metadata !== undefined) params.append('include_metadata', filters.include_metadata);
-    
-    // Handle array parameters
-    if (filters.include_categories?.length) {
-      params.append('include_categories', filters.include_categories.join(','));
-    }
-    if (filters.exclude_categories?.length) {
-      params.append('exclude_categories', filters.exclude_categories.join(','));
-    }
-    
-    return params;
-  }
-
-  // Get summary data for dashboard
-  async getSummary() {
+  /**
+   * Get dashboard summary data
+   * @param {Object} filters - Optional filters (date_range, etc.)
+   * @returns {Promise<Object>} Summary data
+   */
+  async getSummary(filters = {}) {
     try {
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/summary/`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching summary data...');
+      const response = await axiosInstance.get('/reports/summary/', { params: filters });
+      console.log('ReportsAPI: Summary data fetched successfully:', response.data);
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch reports summary:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch reports summary'
-      };
+      console.error('ReportsAPI: Summary fetch error:', error);
+      throw new Error(`Failed to fetch summary: ${error.response?.data?.error || error.message}`);
     }
   }
 
-  // Get income vs expense report
+  /**
+   * Get income vs expense report
+   * @param {Object} filters - Date range, business/personal toggle, etc.
+   * @returns {Promise<Object>} Income vs expense data
+   */
   async getIncomeVsExpense(filters = {}) {
     try {
-      const params = this.buildURLParams(filters);
-
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/income-expense/?${params}`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching income vs expense data...', filters);
+      const response = await axiosInstance.get('/reports/income-expense/', { params: filters });
+      console.log('ReportsAPI: Income vs expense data fetched successfully');
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch income vs expense report:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch income vs expense report'
-      };
+      console.error('ReportsAPI: Income vs expense fetch error:', error);
+      throw new Error(`Failed to fetch income vs expense report: ${error.response?.data?.error || error.message}`);
     }
   }
 
-  // Get category breakdown report
+  /**
+   * Get category breakdown report
+   * @param {Object} filters - Date range, transaction type, etc.
+   * @returns {Promise<Object>} Category breakdown data
+   */
   async getCategoryBreakdown(filters = {}) {
     try {
-      const params = this.buildURLParams(filters);
-
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/category-breakdown/?${params}`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching category breakdown data...', filters);
+      const response = await axiosInstance.get('/reports/category-breakdown/', { params: filters });
+      console.log('ReportsAPI: Category breakdown data fetched successfully');
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch category breakdown report:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch category breakdown report'
-      };
+      console.error('ReportsAPI: Category breakdown fetch error:', error);
+      throw new Error(`Failed to fetch category breakdown report: ${error.response?.data?.error || error.message}`);
     }
   }
 
-  // Get tax deductible report
+  /**
+   * Get tax deductible items report (Platinum tier only)
+   * @param {Object} filters - Date range, category filters, etc.
+   * @returns {Promise<Object>} Tax deductible items data
+   */
   async getTaxDeductible(filters = {}) {
     try {
-      const params = this.buildURLParams(filters);
-
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/tax-deductible/?${params}`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching tax deductible data...', filters);
+      const response = await axiosInstance.get('/reports/tax-deductible/', { params: filters });
+      console.log('ReportsAPI: Tax deductible data fetched successfully');
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch tax deductible report:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch tax deductible report'
-      };
+      console.error('ReportsAPI: Tax deductible fetch error:', error);
+      throw new Error(`Failed to fetch tax deductible report: ${error.response?.data?.error || error.message}`);
     }
   }
 
-  // Get vendor analysis report
+  /**
+   * Get vendor analysis report
+   * @param {Object} filters - Date range, minimum transaction count, etc.
+   * @returns {Promise<Object>} Vendor analysis data
+   */
   async getVendorAnalysis(filters = {}) {
     try {
-      const params = this.buildURLParams(filters);
-
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/vendor-analysis/?${params}`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching vendor analysis data...', filters);
+      const response = await axiosInstance.get('/reports/vendor-analysis/', { params: filters });
+      console.log('ReportsAPI: Vendor analysis data fetched successfully');
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch vendor analysis report:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch vendor analysis report'
-      };
+      console.error('ReportsAPI: Vendor analysis fetch error:', error);
+      throw new Error(`Failed to fetch vendor analysis report: ${error.response?.data?.error || error.message}`);
     }
   }
 
-  // Get audit log report
+  /**
+   * Get audit log report (Platinum tier only)
+   * @param {Object} filters - Date range, status filters, etc.
+   * @returns {Promise<Object>} Audit log data
+   */
   async getAuditLog(filters = {}) {
     try {
-      const params = this.buildURLParams(filters);
-
-      const response = await axiosInstance.get(`${REPORTS_BASE_URL}/audit-log/?${params}`);
-      return {
-        success: true,
-        data: response.data
-      };
+      console.log('ReportsAPI: Fetching audit log data...', filters);
+      const response = await axiosInstance.get('/reports/audit-log/', { params: filters });
+      console.log('ReportsAPI: Audit log data fetched successfully');
+      return response.data;
     } catch (error) {
-      console.error('Failed to fetch audit log report:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error || 'Failed to fetch audit log report'
+      console.error('ReportsAPI: Audit log fetch error:', error);
+      throw new Error(`Failed to fetch audit log report: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Export report data as CSV
+   * @param {string} reportType - Type of report to export
+   * @param {Object} filters - Filters to apply
+   * @returns {Promise<Blob>} CSV data blob
+   */
+  async exportCSV(reportType, filters = {}) {
+    try {
+      console.log(`ReportsAPI: Exporting ${reportType} as CSV...`);
+      const response = await axiosInstance.get(`/reports/${reportType}/export/csv/`, { 
+        params: filters,
+        responseType: 'blob'
+      });
+      console.log(`ReportsAPI: ${reportType} CSV export successful`);
+      return response.data;
+    } catch (error) {
+      console.error(`ReportsAPI: ${reportType} CSV export error:`, error);
+      throw new Error(`Failed to export ${reportType} as CSV: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Export report data as PDF
+   * @param {string} reportType - Type of report to export
+   * @param {Object} filters - Filters to apply
+   * @returns {Promise<Blob>} PDF data blob
+   */
+  async exportPDF(reportType, filters = {}) {
+    try {
+      console.log(`ReportsAPI: Exporting ${reportType} as PDF...`);
+      const response = await axiosInstance.get(`/reports/${reportType}/export/pdf/`, { 
+        params: filters,
+        responseType: 'blob'
+      });
+      console.log(`ReportsAPI: ${reportType} PDF export successful`);
+      return response.data;
+    } catch (error) {
+      console.error(`ReportsAPI: ${reportType} PDF export error:`, error);
+      throw new Error(`Failed to export ${reportType} as PDF: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Test API connectivity and authentication
+   * @returns {Promise<Object>} Connection status
+   */
+  async testConnection() {
+    try {
+      const response = await axiosInstance.get('/reports/test/');
+      return { status: 'connected', data: response.data };
+    } catch (error) {
+      console.error('ReportsAPI: Connection test failed:', error);
+      return { 
+        status: 'error', 
+        error: error.response?.data?.error || error.message 
       };
     }
   }
 }
 
+// Export singleton instance
 const reportsAPI = new ReportsAPI();
-
-// Named export for destructuring
 export { reportsAPI };
-
-// Default export for standard import
 export default reportsAPI;

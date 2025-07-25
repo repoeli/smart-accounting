@@ -12,6 +12,7 @@ import { AppProvider } from './context/AppContext';
 import AppRoutes from './routes/AppRoutes';
 import NotificationSystem from './components/common/NotificationSystem';
 import './utils/apiTest'; // Import API test utility
+import './utils/devAuth'; // Import development authentication helper
 import './App.css';
 
 // Create Material-UI theme

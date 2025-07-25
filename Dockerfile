@@ -26,8 +26,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy and install requirements with stable versions
 COPY requirements-docker-stable.txt ./requirements.txt
-# Install dependencies with specific order to avoid conflicts
-RUN pip install --no-cache-dir --upgrade pip
+# Install dependencies without upgrading pip to avoid network issues
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the project code

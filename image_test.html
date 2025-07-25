@@ -1,0 +1,59 @@
+// Simple test HTML file to check image loading
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Test</title>
+</head>
+<body>
+    <h1>Receipt Image Test</h1>
+    
+    <div>
+        <h2>Direct Image Tag</h2>
+        <img src="http://localhost:8000/media/receipts/Nanny_BILLS_bwLKof7.jpg" 
+             alt="Test Receipt" 
+             style="max-width: 400px; border: 1px solid #ccc;"
+             onload="console.log('✅ Image loaded successfully')"
+             onerror="console.error('❌ Image failed to load')">
+    </div>
+    
+    <div>
+        <h2>JavaScript Test</h2>
+        <div id="js-test"></div>
+    </div>
+    
+    <script>
+        // Test if image URL is accessible
+        const testUrl = 'http://localhost:8000/media/receipts/Nanny_BILLS_bwLKof7.jpg';
+        
+        fetch(testUrl, {
+            method: 'HEAD',
+            mode: 'cors'
+        })
+        .then(response => {
+            console.log('✅ Fetch successful:', response.status);
+            document.getElementById('js-test').innerHTML = `
+                <p style="color: green;">✅ Image URL accessible: ${response.status}</p>
+                <p>Content-Type: ${response.headers.get('content-type')}</p>
+                <p>Content-Length: ${response.headers.get('content-length')}</p>
+            `;
+        })
+        .catch(error => {
+            console.error('❌ Fetch failed:', error);
+            document.getElementById('js-test').innerHTML = `
+                <p style="color: red;">❌ Image URL not accessible: ${error.message}</p>
+            `;
+        });
+        
+        // Alternative test with a new image element
+        const testImg = new Image();
+        testImg.onload = function() {
+            console.log('✅ JavaScript Image object loaded successfully');
+            console.log('Image dimensions:', this.naturalWidth, 'x', this.naturalHeight);
+        };
+        testImg.onerror = function() {
+            console.error('❌ JavaScript Image object failed to load');
+        };
+        testImg.src = testUrl;
+    </script>
+</body>
+</html>

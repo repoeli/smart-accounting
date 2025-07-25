@@ -17,3 +17,5 @@ img2pdf==0.4.4
 openai==1.51.2
 httpx[http2]==0.27.2
 python-magic==0.4.27
+python-dateutil==2.8.2
+cloudinary==1.36.0

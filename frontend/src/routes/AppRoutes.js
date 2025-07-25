@@ -28,6 +28,8 @@ import ProfilePage from '../pages/profile/ProfilePage';
 
 // Receipt Pages (v2 Only)
 import ReceiptPageV2 from '../pages/ReceiptPageV2'; // New v2 page
+import ProfessionalReceiptDashboard from '../pages/ProfessionalReceiptDashboard'; // Professional UI
+import ReceiptPageSimple from '../pages/ReceiptPageSimple'; // Simple fallback page
 import TestPageV2 from '../pages/TestPageV2'; // Simple test page
 import ReceiptPageV2Simple from '../pages/ReceiptPageV2Simple'; // Minimal v2 page
 import ReceiptTestPage from '../pages/ReceiptTestPage'; // Production test page
@@ -44,6 +46,14 @@ import SettingsPage from '../pages/settings/SettingsPage';
 // Reports Pages
 import ReportsPage from '../components/reports/ReportsPage';
 import ReportsTestPage from '../components/reports/ReportsTestPage';
+
+// Subscription Pages
+import SubscriptionPage from '../components/subscriptions/SubscriptionPage';
+import SubscriptionDetails from '../components/subscriptions/SubscriptionDetails';
+import Checkout from '../components/subscriptions/Checkout';
+import PaymentHistory from '../components/subscriptions/PaymentHistory';
+import SubscriptionSuccess from '../components/subscriptions/SubscriptionSuccess';
+import SubscriptionTestPage from '../components/subscriptions/SubscriptionTestPage';
 
 // Debug/Test Components (development only)
 import TokenDebug from '../components/debug/TokenDebug';
@@ -127,13 +137,14 @@ function AppRoutes() {
         {/* Profile */}
         <Route path="/profile" element={<ProfilePage />} />
         
-        {/* Receipts - v2 is the only implementation */}
-        <Route path="/receipts" element={<ReceiptPageV2 />} />
+        {/* Receipts - Professional Dashboard */}
+        <Route path="/receipts" element={<ProfessionalReceiptDashboard />} />
         <Route path="/receipts-v2" element={<ReceiptPageV2 />} />
-        <Route path="/receipts/upload" element={<ReceiptPageV2 />} />
-        <Route path="/receipts/list" element={<ReceiptPageV2 />} />
-        <Route path="/receipts/:id" element={<ReceiptPageV2 />} />
-        <Route path="/receipts/:id/edit" element={<ReceiptPageV2 />} />
+        <Route path="/receipts-simple" element={<ReceiptPageSimple />} />
+        <Route path="/receipts/upload" element={<ProfessionalReceiptDashboard />} />
+        <Route path="/receipts/list" element={<ProfessionalReceiptDashboard />} />
+        <Route path="/receipts/:id" element={<ProfessionalReceiptDashboard />} />
+        <Route path="/receipts/:id/edit" element={<ProfessionalReceiptDashboard />} />
         
         {/* Receipt Test Page - Production Testing */}
         <Route path="/receipts/test" element={<ReceiptTestPage />} />
@@ -142,6 +153,14 @@ function AppRoutes() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/reports/:reportType" element={<ReportsPage />} />
         <Route path="/reports-test" element={<ReportsTestPage />} />
+        
+        {/* Subscriptions */}
+        <Route path="/subscriptions" element={<SubscriptionPage />} />
+        <Route path="/subscriptions/details" element={<SubscriptionDetails />} />
+        <Route path="/subscriptions/checkout" element={<Checkout />} />
+        <Route path="/subscriptions/history" element={<PaymentHistory />} />
+        <Route path="/subscriptions/success" element={<SubscriptionSuccess />} />
+        <Route path="/subscriptions/test" element={<SubscriptionTestPage />} />
         
         {/* Demo Pages */}
         <Route path="/demo/widgets" element={<WidgetDemoPage />} />

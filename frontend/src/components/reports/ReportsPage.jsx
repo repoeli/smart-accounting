@@ -20,7 +20,7 @@ import {
   History,
   TrendingUp
 } from '@mui/icons-material';
-import { useReportAccess } from '../../hooks/reports/useReportAccess';
+import useReportAccess from '../../hooks/reports/useReportAccess';
 import SummaryWidget from './SummaryWidget';
 import ReportCard from './ReportCard';
 import IncomeVsExpenseReport from './reports/IncomeVsExpenseReport';
@@ -31,7 +31,7 @@ import AuditLogReport from './reports/AuditLogReport';
 
 const ReportsPage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
-  const { canViewReport, userPlan } = useReportAccess();
+  const { canAccessReport, userPlan, canViewReports, loading } = useReportAccess();
 
   const handleReportSelect = (reportType) => {
     setSelectedReport(reportType);
@@ -90,7 +90,7 @@ const ReportsPage = () => {
   ];
 
   const getAccessibleReports = () => {
-    return reportConfigs.filter(report => canViewReport(report.id));
+    return reportConfigs.filter(report => canAccessReport(report.id));
   };
 
   const renderReportOverview = () => (
@@ -118,7 +118,7 @@ const ReportsPage = () => {
                 color={report.color}
                 tier={report.tier}
                 onClick={() => handleReportSelect(report.id)}
-                hasAccess={canViewReport(report.id)}
+                hasAccess={canAccessReport(report.id)}
                 reportType={report.id}
               />
             </Grid>
@@ -126,7 +126,7 @@ const ReportsPage = () => {
         </Grid>
 
         {/* Locked Reports */}
-        {reportConfigs.filter(report => !canViewReport(report.id)).length > 0 && (
+        {reportConfigs.filter(report => !canAccessReport(report.id)).length > 0 && (
           <Box sx={{ mt: 4 }}>
             <Typography variant="h6" gutterBottom color="text.secondary">
               Upgrade to Access More Reports
@@ -134,7 +134,7 @@ const ReportsPage = () => {
             
             <Grid container spacing={3}>
               {reportConfigs
-                .filter(report => !canViewReport(report.id))
+                .filter(report => !canAccessReport(report.id))
                 .map((report) => (
                   <Grid item xs={12} sm={6} lg={4} key={report.id}>
                     <ReportCard

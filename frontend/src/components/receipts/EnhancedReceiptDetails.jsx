@@ -203,54 +203,48 @@ const EnhancedReceiptDetails = ({ receiptId, onSave, onCancel, readOnly = false,
       // Prepare the data in the format expected by the backend
       // The backend expects specific field names for manual corrections
       const updateData = {
-        // Backend expects these field names for manual corrections
-        merchant_name: editedData.vendor?.name || '',
-        total_amount: editedData.totals?.total || '',
-        receipt_date: editedData.transaction?.date || '',
+        vendor: editedData.vendor?.name || '',
+        total: editedData.totals?.total || '',
+        date: editedData.transaction?.date || '',
+        type: editedData.category === 'income' || editedData.category === 'refund' ? 'income' : 'expense',
         category: editedData.category || 'other',
-        notes: editedData.notes || '',
-        
-        // Also send the full extracted_data structure for completeness
-        extracted_data: editedData
+        currency: editedData.currency || 'GBP'
       };
       
       console.log('🔍 Saving receipt data:', updateData);
       console.log('🔍 Full edited data structure:', editedData);
       
-      // Use the enhanced receipt service to update the receipt
-      const result = await enhancedReceiptService.updateReceipt(receiptId, updateData);
+      // Use the receipt service to update extracted data (which calls the correct endpoint)
+      const receiptService = new (await import('../../services/api/receiptService')).default();
+      const updatedReceipt = await receiptService.updateExtractedData(receiptId, updateData);
       
-      if (result.success) {
-        // Update local state with the response data
-        const updatedReceipt = {
-          ...receipt,
-          ...result.data,
-          extracted_data: result.data.extracted_data || editedData,
-          is_manually_verified: true,
-          ocr_confidence: 100
-        };
-        
-        setReceipt(updatedReceipt);
-        setEditing(false);
-        
-        console.log('✅ Receipt saved successfully:', updatedReceipt);
-        
-        // Notify parent component
-        if (onSave) {
-          onSave(updatedReceipt);
-        }
-        
-        // Show success message
-        setError(null);
-        setSuccessMessage('Receipt saved successfully!');
-        
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-          setSuccessMessage(null);
-        }, 3000);
-      } else {
-        throw new Error(result.error?.message || 'Failed to save receipt');
+      // Update local state with the response data
+      const updatedReceiptData = {
+        ...receipt,
+        ...updatedReceipt,
+        extracted_data: updatedReceipt.extracted_data || editedData,
+        is_manually_verified: true,
+        ocr_confidence: 100
+      };
+      
+      setReceipt(updatedReceiptData);
+      setEditing(false);
+      
+      console.log('✅ Receipt saved successfully:', updatedReceiptData);
+      
+      // Notify parent component
+      if (onSave) {
+        onSave(updatedReceiptData);
       }
+      
+      // Show success message
+      setError(null);
+      setSuccessMessage('Receipt saved successfully!');
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSuccessMessage(null);
+        }, 3000);
     } catch (err) {
       console.error('❌ Failed to save receipt:', err);
       setError(`Failed to save changes: ${err.message}`);

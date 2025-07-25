@@ -31,6 +31,7 @@ class StripeService:
             'price': 0,
             'currency': 'gbp',
             'interval': 'month',
+            'price_id': settings.STRIPE_BASIC_PRICE_ID,
             'features': {
                 'max_documents': 50,
                 'has_api_access': False,
@@ -44,6 +45,7 @@ class StripeService:
             'price': 500,  # £5.00 in pence
             'currency': 'gbp',
             'interval': 'month',
+            'price_id': settings.STRIPE_PREMIUM_PRICE_ID,
             'features': {
                 'max_documents': 200,
                 'has_api_access': True,
@@ -57,6 +59,7 @@ class StripeService:
             'price': 1000,  # £10.00 in pence
             'currency': 'gbp',
             'interval': 'month',
+            'price_id': settings.STRIPE_PLATINUM_PRICE_ID,
             'features': {
                 'max_documents': 999999,
                 'has_api_access': True,

@@ -98,8 +98,10 @@ export const ROUTES = {
   DASHBOARD: '/dashboard',
   RECEIPTS: '/receipts',
   RECEIPT_DETAIL: '/receipts/:id',
+  REPORTS: '/reports',
   PROFILE: '/profile',
   SUBSCRIPTIONS: '/subscriptions',
+  SETTINGS: '/settings',
   NOT_FOUND: '/404',
 };
 

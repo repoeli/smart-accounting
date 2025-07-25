@@ -33,7 +33,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY', "django-insecure-spylrai(f%q3a@2zb0a(z
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 # Add Heroku domain to allowed hosts
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,.herokuapp.com').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,.herokuapp.com,testserver').split(',')
 
 
 # Application definition
@@ -275,8 +275,14 @@ VERYFI_ENVIRONMENT_URL = os.environ.get('VERYFI_ENVIRONMENT_URL', 'https://api.v
 # Stripe settings
 STRIPE_API_PUBLISHABLE_KEY = os.environ.get('STRIPE_API_PUBLISHABLE_KEY', '')
 STRIPE_API_SECRET_KEY = os.environ.get('STRIPE_API_SECRET_KEY', '')
+STRIPE_SECRET_KEY = STRIPE_API_SECRET_KEY  # Alias for service compatibility
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 STRIPE_API_VERSION = os.environ.get('STRIPE_API_VERSION', '2023-10-16')
+
+# Frontend URLs for Stripe redirects
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
+STRIPE_SUCCESS_URL = os.environ.get('STRIPE_SUCCESS_URL', f'{FRONTEND_URL}/subscriptions/success')
+STRIPE_CANCEL_URL = os.environ.get('STRIPE_CANCEL_URL', f'{FRONTEND_URL}/subscriptions/cancel')
 
 # Subscription price IDs
 STRIPE_BASIC_PRICE_ID = os.environ.get('STRIPE_BASIC_PRICE_ID', '')
@@ -407,6 +413,3 @@ if 'DYNO' in os.environ:
     }
 else:
     HEROKU_DEPLOYMENT = False
-
-# Tax Settings
-DEFAULT_TAX_RATE = float(os.environ.get('DEFAULT_TAX_RATE', '0.25'))  # 25% default

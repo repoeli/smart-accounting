@@ -152,10 +152,10 @@ export const generateSecurePDF = async (
     const preparedElement = prepareElementForCapture(element);
     
     // Merge security options with user options (security options take precedence)
-    const canvasOptions = {
+    const canvasOptions: any = {
       ...html2canvasOptions,
       ...SECURE_HTML2CANVAS_OPTIONS,
-      background: html2canvasOptions.background || '#ffffff',
+      background: (html2canvasOptions as any)?.background || '#ffffff',
     };
     
     // Capture the element as canvas

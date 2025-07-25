@@ -70,8 +70,14 @@ def income_vs_expense_report(request):
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
-        # Get user's transactions - for testing, use owner ID 11 (from the receipt data we saw)
-        user_id = request.user.id if hasattr(request, 'user') and request.user.is_authenticated else 11
+        # Get user's transactions - ensure proper authentication
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        user_id = request.user.id
         transactions = Transaction.objects.filter(
             owner_id=user_id,
             transaction_date__gte=start_date,
@@ -208,7 +214,7 @@ def category_breakdown_report(request):
         # Get user's transactions (authenticated user)
         user_id = request.user.id
         transactions = Transaction.objects.filter(
-            receipt__owner_id=user_id,
+            owner_id=user_id,
             transaction_date__gte=start_date,
             transaction_date__lte=end_date,
             transaction_type=transaction_type
@@ -338,7 +344,7 @@ def tax_deductible_report(request):
         end_date = datetime(tax_year, 12, 31).date()
         
         transactions = Transaction.objects.filter(
-            receipt__owner_id=request.user.id,  # Use authenticated user
+            owner_id=request.user.id,  # Use authenticated user
             transaction_type='expense',
             transaction_date__gte=start_date,
             transaction_date__lte=end_date,
@@ -392,7 +398,7 @@ def tax_deductible_report(request):
         
         # Get all transactions for this user in the tax year for context
         all_expenses = Transaction.objects.filter(
-            receipt__owner_id=request.user.id,  # Use authenticated user
+            owner_id=request.user.id,  # Use authenticated user
             transaction_type='expense',
             transaction_date__gte=start_date,
             transaction_date__lte=end_date
@@ -479,7 +485,7 @@ def vendor_analysis_report(request):
         # Get user's transactions (authenticated user)
         user_id = request.user.id
         transactions = Transaction.objects.filter(
-            receipt__owner_id=user_id,
+            owner_id=user_id,
             transaction_date__gte=start_date,
             transaction_date__lte=end_date
         )
@@ -807,7 +813,7 @@ def report_summary(request):
         # Get user's data (authenticated user)
         user_id = request.user.id
         receipts = Receipt.objects.filter(owner_id=user_id)
-        transactions = Transaction.objects.filter(receipt__owner_id=user_id)
+        transactions = Transaction.objects.filter(owner_id=user_id)
         
         # Quick metrics
         total_receipts = receipts.count()

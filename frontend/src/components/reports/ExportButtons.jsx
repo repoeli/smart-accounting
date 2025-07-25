@@ -14,12 +14,12 @@ const ExportButtons = ({
   disabled = false 
 }) => {
   const [exporting, setExporting] = useState(null);
-  const { canExport, getUpgradeMessage } = useReportAccess();
+  const { canExportReports, getUpgradeMessage } = useReportAccess();
 
   // Computed disabled states for export buttons
   const isExportDisabled = disabled || exporting !== null;
-  const isCsvDisabled = isExportDisabled || !canExport('csv');
-  const isPdfDisabled = isExportDisabled || !canExport('pdf');
+  const isCsvDisabled = isExportDisabled || !canExportReports();
+  const isPdfDisabled = isExportDisabled || !canExportReports();
 
   // Format data for CSV export
   const formatDataForCSV = (data) => {
@@ -115,8 +115,8 @@ const ExportButtons = ({
 
   // Export to CSV
   const handleCSVExport = async () => {
-    if (!canExport('csv')) {
-      alert(getUpgradeMessage('csv-export'));
+    if (!canExportReports()) {
+      alert(getUpgradeMessage('professional'));
       return;
     }
 
@@ -187,8 +187,8 @@ const ExportButtons = ({
 
   // Export to PDF
   const handlePDFExport = async () => {
-    if (!canExport('pdf')) {
-      alert(getUpgradeMessage('pdf-export'));
+    if (!canExportReports()) {
+      alert(getUpgradeMessage('professional'));
       return;
     }
 
@@ -382,7 +382,7 @@ const ExportButtons = ({
 
   return (
     <Box sx={{ display: 'flex', gap: 1 }}>
-      <Tooltip title={!canExport('csv') ? getUpgradeMessage('csv-export') : 'Export as CSV'}>
+      <Tooltip title={!canExportReports() ? getUpgradeMessage('professional') : 'Export as CSV'}>
         <span>
           <Button
             variant="outlined"
@@ -396,7 +396,7 @@ const ExportButtons = ({
         </span>
       </Tooltip>
       
-      <Tooltip title={!canExport('pdf') ? getUpgradeMessage('pdf-export') : 'Export as PDF'}>
+      <Tooltip title={!canExportReports() ? getUpgradeMessage('professional') : 'Export as PDF'}>
         <span>
           <Button
             variant="outlined"

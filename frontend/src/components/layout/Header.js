@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
 import { useClickOutside } from '../../hooks';
+import SubscriptionStatus from '../subscriptions/SubscriptionStatus';
 
 function Header() {
   const navigate = useNavigate();
@@ -52,8 +53,11 @@ function Header() {
             </button>
           </div>
 
-          {/* Right side - Theme toggle and user menu */}
+          {/* Right side - Subscription status, theme toggle and user menu */}
           <div className="flex items-center space-x-4">
+            {/* Subscription Status */}
+            <SubscriptionStatus />
+
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}
