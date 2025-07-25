@@ -61,6 +61,34 @@ class TokenStorage {
   }
 
   /**
+   * Set access token only
+   */
+  setAccessToken(token) {
+    try {
+      if (token) {
+        localStorage.setItem(AUTH_CONSTANTS.TOKEN_KEY, token);
+        console.log('TokenStorage: Access token updated');
+      }
+    } catch (error) {
+      console.error('Error setting access token:', error);
+    }
+  }
+
+  /**
+   * Set refresh token only  
+   */
+  setRefreshToken(token) {
+    try {
+      if (token) {
+        localStorage.setItem(AUTH_CONSTANTS.REFRESH_TOKEN_KEY, token);
+        console.log('TokenStorage: Refresh token updated');
+      }
+    } catch (error) {
+      console.error('Error setting refresh token:', error);
+    }
+  }
+
+  /**
    * Set tokens in localStorage
    */
   setTokens({ access, refresh }) {

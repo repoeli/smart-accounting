@@ -359,12 +359,40 @@ def process_checkout_success(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        return Response({
-            'success': True,
-            'subscription_id': result['subscription_id'],
-            'plan': result['plan'],
-            'type': result['type']
-        })
+        # Get additional subscription details and features for frontend
+        try:
+            user = request.user
+            subscription = SubscriptionService.get_user_subscription(user)
+            features = StripeService.get_plan_features(result['plan'])
+            
+            return Response({
+                'success': True,
+                'subscription': {
+                    'id': result['subscription_id'],
+                    'plan': result['plan'],
+                    'type': result['type'],
+                    'status': subscription.status if subscription else 'active',
+                    'amount': str(subscription.amount) if subscription else '0.00',
+                    'currency': 'gbp',
+                    'stripe_subscription_id': result.get('stripe_subscription_id'),
+                    'current_period_end': subscription.current_period_end.isoformat() if subscription and subscription.current_period_end else None,
+                },
+                'features': features,
+                'plan_id': result['plan'],
+                'subscription_id': result['subscription_id']
+            })
+        except Exception as e:
+            logger.error(f"Error getting subscription details after processing: {str(e)}")
+            # Return basic response if detailed info fails
+            return Response({
+                'success': True,
+                'subscription': {
+                    'plan': result['plan'],
+                    'type': result['type']
+                },
+                'features': StripeService.get_plan_features(result['plan']),
+                'subscription_id': result['subscription_id']
+            })
         
     except Exception as e:
         logger.error(f"Error processing checkout success: {str(e)}")

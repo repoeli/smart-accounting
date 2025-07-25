@@ -41,15 +41,51 @@ const SubscriptionSuccess = () => {
   const [subscriptionData, setSubscriptionData] = useState(null);
   const [features, setFeatures] = useState(null);
 
-  const sessionId = searchParams.get('session_id');
+  // Try multiple methods to extract session ID
+  const getSessionId = () => {
+    // Method 1: URL search params
+    const sessionIdFromParams = searchParams.get('session_id');
+    if (sessionIdFromParams) {
+      console.log('✅ Session ID found via searchParams:', sessionIdFromParams);
+      return sessionIdFromParams;
+    }
+
+    // Method 2: Direct URL parsing
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionIdFromUrl = urlParams.get('session_id');
+    if (sessionIdFromUrl) {
+      console.log('✅ Session ID found via URLSearchParams:', sessionIdFromUrl);
+      return sessionIdFromUrl;
+    }
+
+    // Method 3: Hash parameters (in case Stripe redirects differently)
+    const hash = window.location.hash;
+    if (hash.includes('session_id=')) {
+      const hashSessionId = hash.split('session_id=')[1]?.split('&')[0];
+      if (hashSessionId) {
+        console.log('✅ Session ID found in hash:', hashSessionId);
+        return hashSessionId;
+      }
+    }
+
+    console.error('❌ Session ID not found in URL');
+    return null;
+  };
+
+  const sessionId = getSessionId();
 
   useEffect(() => {
+    console.log('🔍 SubscriptionSuccess: URL search params:', window.location.search);
+    console.log('🔍 SubscriptionSuccess: Session ID from params:', sessionId);
+    
     if (!sessionId) {
+      console.error('❌ SubscriptionSuccess: No session ID provided');
       setError('No session ID provided. Please try again.');
       setLoading(false);
       return;
     }
 
+    console.log('✅ SubscriptionSuccess: Processing checkout with session ID:', sessionId);
     processSuccessfulCheckout();
   }, [sessionId]);
 
@@ -58,24 +94,32 @@ const SubscriptionSuccess = () => {
       setLoading(true);
       setError(null);
       
+      console.log('🚀 SubscriptionSuccess: Processing checkout success for session:', sessionId);
+      
       // Process the successful checkout
       const response = await subscriptionAPI.processCheckoutSuccess(sessionId);
       
-      if (response.success) {
+      console.log('📦 SubscriptionSuccess: API response:', response);
+      
+      if (response && response.success) {
+        console.log('✅ SubscriptionSuccess: Processing successful');
         setSubscriptionData(response.subscription);
         setFeatures(response.features);
         
         // Refresh the subscription data in the context
         setTimeout(() => {
+          console.log('🔄 SubscriptionSuccess: Refreshing subscription context');
           refreshSubscription();
         }, 1000);
       } else {
-        throw new Error(response.error || 'Failed to process checkout');
+        const errorMessage = response?.error || 'Failed to process checkout';
+        console.error('❌ SubscriptionSuccess: Processing failed:', errorMessage);
+        throw new Error(errorMessage);
       }
       
     } catch (err) {
-      console.error('Error processing checkout success:', err);
-      setError(err.message);
+      console.error('❌ SubscriptionSuccess: Error processing checkout success:', err);
+      setError(err.message || 'An error occurred while processing your subscription');
     } finally {
       setLoading(false);
     }

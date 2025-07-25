@@ -71,7 +71,7 @@ const SubscriptionPage = () => {
 
   const getCurrentPlanId = () => {
     if (!currentSubscription) return 'basic';
-    return currentSubscription.plan_id || 'basic';
+    return currentSubscription.plan || 'basic';
   };
 
   const handleSelectPlan = (planId) => {
@@ -90,8 +90,8 @@ const SubscriptionPage = () => {
 
       const result = await subscriptionAPI.createCheckoutSession(
         selectedPlan,
-        `${window.location.origin}/subscriptions/success?plan=${selectedPlan}`,
-        `${window.location.origin}/subscriptions/cancel?plan=${selectedPlan}`
+        null, // Let backend use default success URL with session_id
+        null  // Let backend use default cancel URL
       );
 
       if (result.success && result.checkout_url) {

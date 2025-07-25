@@ -84,8 +84,8 @@ const SubscriptionTestPage = () => {
 
       const result = await subscriptionAPI.createCheckoutSession(
         planId,
-        `${window.location.origin}/subscription/success?plan=${planId}`,
-        `${window.location.origin}/subscription/cancel?plan=${planId}`
+        null, // Let backend use default success URL with session_id
+        null  // Let backend use default cancel URL
       );
 
       if (result.success && result.checkout_url) {

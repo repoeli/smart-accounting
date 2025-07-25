@@ -99,7 +99,9 @@ class SubscriptionService:
         try:
             with transaction.atomic():
                 # Retrieve session data from Stripe
+                logger.info(f"Processing checkout session: {session_id}")
                 session_data = StripeService.retrieve_checkout_session(session_id)
+                logger.info(f"Session data: {session_data}")
                 
                 if session_data['payment_status'] != 'paid' and session_data['status'] != 'complete':
                     logger.warning(f"Session {session_id} not completed: {session_data['status']}")
@@ -159,7 +161,36 @@ class SubscriptionService:
                         }
                     
                     # Get subscription details from Stripe
-                    stripe_subscription = StripeService.retrieve_subscription(stripe_subscription_id)
+                    logger.info(f"Retrieving Stripe subscription: {stripe_subscription_id}")
+                    try:
+                        stripe_subscription = StripeService.retrieve_subscription(stripe_subscription_id)
+                        logger.info(f"Stripe subscription retrieved: {stripe_subscription}")
+                        
+                        # Check if subscription retrieval returned an error (incomplete status)
+                        if 'error' in stripe_subscription:
+                            logger.warning(f"Subscription {stripe_subscription_id} is incomplete: {stripe_subscription['error']}")
+                            # Create a basic subscription record for tracking, but mark it as incomplete
+                            subscription = cls._create_or_update_subscription(
+                                user=user,
+                                plan_id=plan_id,
+                                stripe_subscription_id=stripe_subscription_id,
+                                stripe_customer_id=session_data['customer_id'],
+                                status=Subscription.INCOMPLETE,
+                                amount=Decimal('0.00')  # Will be updated when subscription becomes active
+                            )
+                            
+                            return {
+                                'error': f'Subscription payment incomplete: {stripe_subscription["error"]}',
+                                'subscription_id': subscription.id,
+                                'requires_action': True,
+                                'status': stripe_subscription['status']
+                            }
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to retrieve Stripe subscription {stripe_subscription_id}: {str(e)}")
+                        return {
+                            'error': f'Failed to retrieve subscription: {str(e)}'
+                        }
                     
                     # Create local subscription
                     subscription = cls._create_or_update_subscription(

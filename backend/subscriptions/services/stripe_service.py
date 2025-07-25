@@ -280,17 +280,52 @@ class StripeService:
         try:
             subscription = stripe.Subscription.retrieve(subscription_id)
             
+            # Log the subscription object for debugging
+            logger.info(f"Retrieved subscription {subscription_id}: status={subscription.status}")
+            
             # Extract pricing info from the subscription
             price_id = subscription['items']['data'][0]['price']['id']
             unit_amount = subscription['items']['data'][0]['price']['unit_amount']
             currency = subscription['items']['data'][0]['price']['currency']
             
+            # Safely access period fields with proper error handling
+            current_period_start = getattr(subscription, 'current_period_start', None)
+            current_period_end = getattr(subscription, 'current_period_end', None)
+            
+            # Handle incomplete or pending subscriptions
+            if subscription.status in ['incomplete', 'incomplete_expired', 'past_due']:
+                logger.warning(f"Subscription {subscription_id} is in {subscription.status} status")
+                return {
+                    'error': f'Subscription is {subscription.status}',
+                    'status': subscription.status,
+                    'requires_action': True
+                }
+            
+            # For active subscriptions, period data should exist
+            if current_period_start is None or current_period_end is None:
+                if subscription.status == 'active':
+                    logger.warning(f"Active subscription {subscription_id} missing period data, using current time as fallback")
+                    # For active subscriptions without period data, use current time and add 30 days
+                    from datetime import datetime, timezone
+                    import time
+                    current_time = int(time.time())
+                    current_period_start = current_time
+                    current_period_end = current_time + (30 * 24 * 60 * 60)  # 30 days later
+                else:
+                    # For non-active subscriptions, use default values
+                    logger.warning(f"Subscription {subscription_id} ({subscription.status}) missing period data, using defaults")
+                    from datetime import datetime, timezone
+                    import time
+                    current_time = int(time.time())
+                    current_period_start = current_time
+                    current_period_end = current_time + (30 * 24 * 60 * 60)  # 30 days later
+            
             return {
                 'id': subscription.id,
                 'customer_id': subscription.customer,
                 'status': subscription.status,
-                'current_period_start': subscription.current_period_start,
-                'current_period_end': subscription.current_period_end,
+                'current_period_start': current_period_start,
+                'current_period_end': current_period_end,
                 'cancel_at_period_end': subscription.cancel_at_period_end,
                 'canceled_at': subscription.canceled_at,
                 'trial_start': subscription.trial_start,
@@ -303,6 +338,9 @@ class StripeService:
             
         except stripe.error.StripeError as e:
             logger.error(f"Stripe error retrieving subscription {subscription_id}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error processing subscription {subscription_id}: {str(e)}")
             raise
     
     @classmethod

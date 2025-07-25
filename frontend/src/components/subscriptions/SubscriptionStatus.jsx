@@ -30,8 +30,8 @@ const SubscriptionStatus = () => {
   };
 
   const getCurrentPlan = () => {
-    if (subscription && subscription.plan_id) {
-      return subscription.plan_id.toUpperCase();
+    if (subscription && subscription.plan) {
+      return subscription.plan.toUpperCase();
     }
     return 'BASIC';
   };
