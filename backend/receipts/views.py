@@ -20,11 +20,26 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer
-from .services.openai_service import process_receipt
+# Temporarily commented out to fix deployment - will uncomment after backend is running
+# from .services.openai_service import process_receipt
 from .services.cloudinary_service import cloudinary_service
 from .utils import DecimalEncoder
 
 logger = logging.getLogger(__name__)
+
+# Temporary stub function to replace process_receipt during deployment fix
+async def temp_process_receipt_stub(file_path, use_url=False):
+    """Temporary stub to replace process_receipt functionality during deployment"""
+    return {
+        'success': True,
+        'message': 'Receipt processing temporarily disabled during deployment setup',
+        'data': {
+            'merchant_name': 'Processing Temporarily Disabled',
+            'total_amount': '0.00',
+            'transaction_date': '2025-01-01',
+            'items': []
+        }
+    }
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):
@@ -144,7 +159,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        result = loop.run_until_complete(process_receipt(receipt.cloudinary_url, use_url=True))
+                        result = loop.run_until_complete(temp_process_receipt_stub(receipt.cloudinary_url, use_url=True))
                     finally:
                         loop.close()
                 else:
@@ -159,7 +174,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         try:
-                            result = loop.run_until_complete(process_receipt(temp_file.name))
+                            result = loop.run_until_complete(temp_process_receipt_stub(temp_file.name))
                         finally:
                             loop.close()
 
@@ -235,7 +250,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(process_receipt(receipt.file.path))
+                result = loop.run_until_complete(temp_process_receipt_stub(receipt.file.path))
             finally:
                 loop.close()
 
