@@ -85,14 +85,18 @@ class OpenAIVisionService:
     """
 
     def __init__(self):
-        if not settings.OPENAI_API_KEY:
+        api_key = getattr(settings, 'OPENAI_API_KEY', None) or os.environ.get('OPENAI_API_KEY', '')
+        
+        if not api_key:
             raise ValueError("OPENAI_API_KEY is not configured")
         
         # Handle test/development environments
         is_test_env = (
-            settings.OPENAI_API_KEY.startswith('sk-test-') or 
-            settings.OPENAI_API_KEY.startswith('test-') or
-            settings.DEBUG and 'test' in settings.OPENAI_API_KEY.lower()
+            api_key.startswith('sk-test-') or 
+            api_key.startswith('test-') or
+            'test' in api_key.lower() or
+            os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('.testing') or
+            os.environ.get('CI') == 'true'  # GitHub Actions
         )
         
         if is_test_env:
@@ -100,7 +104,7 @@ class OpenAIVisionService:
             self.async_client = None
             logger.warning("Running in test mode - OpenAI client disabled")
         else:
-            self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, http2=True)
+            self.async_client = AsyncOpenAI(api_key=api_key, http2=True)
             
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT

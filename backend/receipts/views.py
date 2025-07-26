@@ -26,8 +26,15 @@ from .utils import DecimalEncoder
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI service
-openai_service = OpenAIVisionService()
+# Initialize OpenAI service lazily to avoid import-time errors
+openai_service = None
+
+def get_openai_service():
+    """Get OpenAI service instance, creating it if needed."""
+    global openai_service
+    if openai_service is None:
+        openai_service = OpenAIVisionService()
+    return openai_service
 
 # Advanced process_receipt function using the optimized OpenAI service
 async def process_receipt(image_path_or_url, use_url=False):
@@ -36,12 +43,13 @@ async def process_receipt(image_path_or_url, use_url=False):
     Returns extracted data in the new flat schema format.
     """
     try:
+        service = get_openai_service()
         if use_url:
             # Process using URL (Cloudinary)
-            result = await openai_service.process_receipt_from_url(image_path_or_url)
+            result = await service.process_receipt_from_url(image_path_or_url)
         else:
             # Process using local file path
-            result = await openai_service.process_receipt_from_file(image_path_or_url)
+            result = await service.process_receipt_from_file(image_path_or_url)
         
         # Convert to new schema format
         if result and result.get('success'):

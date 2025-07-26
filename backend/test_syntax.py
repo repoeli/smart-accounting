@@ -4,6 +4,12 @@ Simple syntax validation script for GitHub Actions
 """
 import os
 import sys
+
+# Set test environment variables BEFORE importing Django
+os.environ.setdefault('OPENAI_API_KEY', 'sk-test-key-for-syntax-validation')
+os.environ.setdefault('XAI_API_KEY', 'xai-test-key-for-syntax-validation')
+os.environ.setdefault('CI', 'true')  # Mark as CI environment
+
 import django
 from django.conf import settings
 
@@ -18,12 +24,6 @@ from dotenv import load_dotenv
 env_path = Path(__file__).parent / '.env.test'
 load_dotenv(env_path)
 
-# Set a dummy API key for testing if not provided
-if not os.environ.get('OPENAI_API_KEY'):
-    os.environ['OPENAI_API_KEY'] = 'test-api-key-for-syntax-validation'
-if not os.environ.get('XAI_API_KEY'):
-    os.environ['XAI_API_KEY'] = 'test-api-key-for-syntax-validation'
-
 # Configure minimal Django settings
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 
@@ -37,7 +37,7 @@ try:
     import receipts.serializers
     print("✅ Receipt app imports successful")
     
-    # Test OpenAI service import (should work with dummy API key for syntax validation)
+    # Test OpenAI service import (should work with test environment)
     try:
         from receipts.services.openai_service import OpenAIVisionService
         print("✅ OpenAI service import successful")
