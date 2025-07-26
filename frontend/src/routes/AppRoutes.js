@@ -30,15 +30,9 @@ import ProfilePage from '../pages/profile/ProfilePage';
 import ReceiptPageV2 from '../pages/ReceiptPageV2'; // New v2 page
 import ProfessionalReceiptDashboard from '../pages/ProfessionalReceiptDashboard'; // Professional UI
 import ReceiptPageSimple from '../pages/ReceiptPageSimple'; // Simple fallback page
-import TestPageV2 from '../pages/TestPageV2'; // Simple test page
-import ReceiptPageV2Simple from '../pages/ReceiptPageV2Simple'; // Minimal v2 page
-import ReceiptTestPage from '../pages/ReceiptTestPage'; // Production test page
 
 // DEBUG - Diagnostic Component for Critical Issue Resolution
 import ReceiptUploadDiagnostic from '../components/debug/ReceiptUploadDiagnostic';
-
-// Demo Pages
-import WidgetDemoPage from '../pages/demo/WidgetDemoPage';
 
 // Settings Pages
 import SettingsPage from '../pages/settings/SettingsPage';
@@ -117,10 +111,6 @@ function AppRoutes() {
         <Route path="/simple-test" element={<SimpleTokenTest />} />
         <Route path="/email-test" element={<EmailVerificationTest />} />
         <Route path="/upload-diagnostic" element={<ReceiptUploadDiagnostic />} />
-        <Route path="/receipts-v2-test" element={<ReceiptPageV2Simple />} />
-        <Route path="/receipts-v2-full" element={<ReceiptPageV2 />} />
-        <Route path="/test-simple" element={<TestPageV2 />} />
-        <Route path="/receipt-test" element={<ReceiptTestPage />} />
       </Route>
 
       {/* Protected Routes */}
@@ -146,9 +136,6 @@ function AppRoutes() {
         <Route path="/receipts/:id" element={<ProfessionalReceiptDashboard />} />
         <Route path="/receipts/:id/edit" element={<ProfessionalReceiptDashboard />} />
         
-        {/* Receipt Test Page - Production Testing */}
-        <Route path="/receipts/test" element={<ReceiptTestPage />} />
-        
         {/* Reports */}
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/reports/:reportType" element={<ReportsPage />} />
@@ -161,9 +148,6 @@ function AppRoutes() {
         <Route path="/subscriptions/history" element={<PaymentHistory />} />
         <Route path="/subscriptions/success" element={<SubscriptionSuccess />} />
         <Route path="/subscriptions/test" element={<SubscriptionTestPage />} />
-        
-        {/* Demo Pages */}
-        <Route path="/demo/widgets" element={<WidgetDemoPage />} />
         
         {/* Settings */}
         <Route path="/settings" element={<SettingsPage />} />
