@@ -89,7 +89,6 @@ start.sh
 
 validate-integration.js
 openai_service_v0.7.py
-openai_service.py
 
 api_capabilities_final_summary.json
 api_comparison_results.json
