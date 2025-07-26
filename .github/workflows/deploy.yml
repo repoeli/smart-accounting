@@ -1,25 +1,61 @@
-name: Deploy
+name: Build and Test
 
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  deploy:
+  test-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+          
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install dependencies
+          
+      - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements/production.txt
-      - name: Build Docker image
+          pip install -r backend/requirements.txt
+          
+      - name: Test backend syntax
         run: |
-          docker build -f docker/Dockerfile.backend -t smart-accounting-backend:latest .
-      # Add your deployment steps here (e.g., push to AWS ECR, deploy to ECS/EC2)
-      - name: Deploy to AWS (placeholder)
-        run: echo "Add deployment scripts here."
+          # Basic syntax validation
+          python -m py_compile backend/manage.py
+          python -c "import sys; sys.path.insert(0, 'backend'); import receipts.views"
+          echo "✅ Backend syntax validation passed"
+          
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+          
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+          echo "✅ Frontend build successful"
+          
+  deploy-status:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    steps:
+      - name: Deployment Ready
+        run: |
+          echo "🚀 All tests passed - ready for manual deployment"
+          echo "Backend: Deploy with './deploy-backend.sh'"
+          echo "Frontend: Deploy with './deploy-frontend.sh'"
