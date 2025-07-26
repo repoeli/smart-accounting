@@ -69,8 +69,24 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Return empty queryset temporarily to debug 500 error"""
-        return Receipt.objects.none()
+        """Return receipts for the authenticated user, ordered by newest first"""
+        queryset = Receipt.objects.filter(owner=self.request.user).order_by('-uploaded_at')
+        logger.info(f"ReceiptViewSet.get_queryset: Found {queryset.count()} receipts for user {self.request.user.id}")
+        return queryset
+
+    def list(self, request, *args, **kwargs):
+        """Override list to add debug logging"""
+        logger.info(f"ReceiptViewSet.list called by user {request.user.id}")
+        queryset = self.get_queryset()
+        logger.info(f"ReceiptViewSet.list: Queryset has {queryset.count()} receipts")
+        
+        # Add detailed logging for each receipt
+        for receipt in queryset[:5]:  # Log first 5 receipts
+            logger.info(f"Receipt {receipt.id}: filename={receipt.original_filename}, status={receipt.ocr_status}, extracted_data={bool(receipt.extracted_data)}")
+        
+        serializer = self.get_serializer(queryset, many=True)
+        logger.info(f"ReceiptViewSet.list: Serialized {len(serializer.data)} receipts")
+        return Response(serializer.data)
 
     @method_decorator(csrf_exempt)
     def dispatch(self, request, *args, **kwargs):
