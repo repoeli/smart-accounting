@@ -17,11 +17,36 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
-# Heroku Redis Configuration
+# Heroku Redis Configuration with SSL support
+redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+
+# Configure SSL for Heroku Redis (rediss://)
+broker_use_ssl = None
+broker_transport_options = {}
+
+if redis_url.startswith('rediss://'):
+    # Heroku Redis uses SSL, configure it properly
+    import ssl
+    broker_use_ssl = {
+        'ssl_cert_reqs': ssl.CERT_REQUIRED,
+        'ssl_ca_certs': None,
+        'ssl_certfile': None,
+        'ssl_keyfile': None,
+    }
+    
+    # Add SSL parameters to Redis URL
+    if '?' not in redis_url:
+        redis_url += '?ssl_cert_reqs=required'
+    else:
+        redis_url += '&ssl_cert_reqs=required'
+
 app.conf.update(
-    # Redis URL from Heroku environment
-    broker_url=os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
-    result_backend=os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
+    # Redis URL from Heroku environment with SSL support
+    broker_url=redis_url,
+    result_backend=redis_url,
+    broker_use_ssl=broker_use_ssl,
+    broker_transport_options=broker_transport_options,
+    redis_backend_use_ssl=broker_use_ssl,
     
     # Performance Optimizations
     task_serializer='json',
