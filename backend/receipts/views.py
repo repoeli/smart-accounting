@@ -226,65 +226,41 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             
             receipt.save()
 
-            # Process with OpenAI Vision API
+            # Process with Celery background task (ASYNC)
             try:
-                # Use Cloudinary URL if available, otherwise use local file
-                if cloudinary_success and receipt.cloudinary_url:
-                    # Process using Cloudinary URL directly
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        result = loop.run_until_complete(process_receipt(receipt.cloudinary_url, use_url=True))
-                    finally:
-                        loop.close()
-                else:
-                    # Process using temp file from local storage
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{image_file.name.split(".")[-1]}') as temp_file:
-                        image_file.seek(0)
-                        for chunk in image_file.chunks():
-                            temp_file.write(chunk)
-                        temp_file.flush()
-                        
-                        # Process receipt asynchronously
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            result = loop.run_until_complete(process_receipt(temp_file.name))
-                        finally:
-                            loop.close()
-
-                # Update receipt with extracted data
-                receipt.extracted_data = result.get('extracted_data', {})
-                receipt.processing_metadata = result.get('processing_metadata', {})
-                receipt.ocr_status = 'completed'
+                from .tasks import process_receipt_task
+                
+                # Set initial status to processing
+                receipt.ocr_status = 'processing'
                 receipt.save()
+                
+                # Trigger background OCR processing
+                task = process_receipt_task.delay(receipt.id, use_v5=True)
+                
+                # Store task ID for tracking
+                receipt.processing_metadata = {
+                    'task_id': task.id,
+                    'status': 'queued',
+                    'queued_at': datetime.now().isoformat()
+                }
+                receipt.save()
+                
+                logger.info(f"Queued OCR processing for receipt {receipt.id} with task {task.id}")
+                
+                # Return immediately with processing status
+                # The frontend should poll for completion
 
-                # Create transaction if extraction was successful
-                extracted_data = receipt.extracted_data or {}
-                if extracted_data.get('total'):
-                    try:
-                        total_amount = Decimal(str(extracted_data['total']))
-                        transaction_type = extracted_data.get('type', 'expense')
-                        
-                        Transaction.objects.create(
-                            receipt=receipt,
-                            owner=request.user,
-                            total_amount=total_amount,
-                            transaction_type=transaction_type,
-                            vendor_name=extracted_data.get('vendor', 'Unknown'),
-                            transaction_date=self._parse_date(extracted_data.get('date'))
-                        )
-                    except (InvalidOperation, ValueError) as e:
-                        logger.warning(f"Could not create transaction for receipt {receipt.id}: {e}")
-
+                # Create transaction if extraction was successful (will be done by Celery task)
+                # The transaction will be created when OCR completes
+                
                 serializer = self.get_serializer(receipt)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
 
             except Exception as e:
-                logger.error(f"OpenAI processing failed for receipt {receipt.id}: {e}")
+                logger.error(f"Celery task queueing failed for receipt {receipt.id}: {e}")
                 receipt.ocr_status = 'failed'
                 receipt.processing_metadata = {
-                    'error': str(e),
+                    'error': f'Task queueing failed: {str(e)}',
                     'processing_time': 0,
                     'cost_usd': 0,
                     'token_usage': 0,
@@ -293,7 +269,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 receipt.save()
                 
                 return Response(
-                    {'error': f'Processing failed: {str(e)}'},
+                    {'error': f'Processing queue failed: {str(e)}'},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
@@ -304,65 +280,76 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-    @action(detail=True, methods=['post'])
-    def reprocess(self, request, pk=None):
+    @action(detail=True, methods=['get'])
+    def processing_status(self, request, pk=None):
         """
-        Reprocess a receipt with OpenAI Vision API.
+        Get the current processing status of a receipt
+        Used by frontend to poll for completion
         """
         receipt = self.get_object()
         
-        if not receipt.file:
+        # Check Celery task status if we have a task ID
+        task_info = receipt.processing_metadata or {}
+        task_id = task_info.get('task_id')
+        
+        response_data = {
+            'receipt_id': receipt.id,
+            'ocr_status': receipt.ocr_status,
+            'processing_metadata': receipt.processing_metadata
+        }
+        
+        if task_id:
+            from celery.result import AsyncResult
+            try:
+                task_result = AsyncResult(task_id)
+                response_data['task_status'] = task_result.status
+                response_data['task_info'] = task_result.info if task_result.info else {}
+            except Exception as e:
+                logger.warning(f"Could not get task status for {task_id}: {e}")
+        
+        return Response(response_data)
+
+    @action(detail=True, methods=['post'])
+    def reprocess(self, request, pk=None):
+        """
+        Reprocess a receipt with OCR using Celery background task
+        """
+        receipt = self.get_object()
+        
+        if not receipt.file and not receipt.cloudinary_url:
             return Response(
                 {'error': 'No image available for reprocessing'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
+            from .tasks import process_receipt_task
+            
+            # Reset status
             receipt.ocr_status = 'processing'
+            receipt.extracted_data = {}
+            
+            # Queue reprocessing task
+            task = process_receipt_task.delay(receipt.id, use_v5=True)
+            
+            receipt.processing_metadata = {
+                'task_id': task.id,
+                'status': 'queued',
+                'queued_at': datetime.now().isoformat(),
+                'reprocessed': True
+            }
             receipt.save()
-
-            # Process with OpenAI Vision API
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                result = loop.run_until_complete(process_receipt(receipt.file.path))
-            finally:
-                loop.close()
-
-            # Update receipt with new extracted data
-            receipt.extracted_data = result.get('extracted_data', {})
-            receipt.processing_metadata = result.get('processing_metadata', {})
-            receipt.ocr_status = 'completed'
-            receipt.save()
-
-            # Update or create transaction
-            extracted_data = receipt.extracted_data or {}
-            if extracted_data.get('total'):
-                try:
-                    total_amount = Decimal(str(extracted_data['total']))
-                    transaction_type = extracted_data.get('type', 'expense')
-                    
-                    # Update existing transaction or create new one
-                    transaction, created = Transaction.objects.update_or_create(
-                        receipt=receipt,
-                        defaults={
-                            'total_amount': total_amount,
-                            'transaction_type': transaction_type,
-                            'vendor_name': extracted_data.get('vendor', 'Unknown'),
-                            'transaction_date': self._parse_date(extracted_data.get('date'))
-                        }
-                    )
-                except (InvalidOperation, ValueError) as e:
-                    logger.warning(f"Could not update transaction for receipt {receipt.id}: {e}")
-
+            
+            logger.info(f"Queued reprocessing for receipt {receipt.id} with task {task.id}")
+            
             serializer = self.get_serializer(receipt)
             return Response(serializer.data)
 
         except Exception as e:
-            logger.error(f"Reprocessing failed for receipt {receipt.id}: {e}")
+            logger.error(f"Reprocessing queue failed for receipt {receipt.id}: {e}")
             receipt.ocr_status = 'failed'
             receipt.processing_metadata = {
-                'error': str(e),
+                'error': f'Reprocessing queue failed: {str(e)}',
                 'processing_time': 0,
                 'cost_usd': 0,
                 'token_usage': 0,

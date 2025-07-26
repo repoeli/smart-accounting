@@ -17,6 +17,27 @@ from .services.vision_api_router import VisionAPIRouter
 
 logger = logging.getLogger(__name__)
 
+def _parse_date(date_str):
+    """Parse date string into date object"""
+    from datetime import date
+    
+    if not date_str:
+        return date.today()
+    
+    try:
+        # Try different date formats
+        for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S']:
+            try:
+                parsed = datetime.strptime(date_str, fmt)
+                return parsed.date()
+            except ValueError:
+                continue
+        
+        # If no format works, return today
+        return date.today()
+    except:
+        return date.today()
+
 # Create a single router instance for task processing with error handling
 router = None
 router_error = None
@@ -64,15 +85,16 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
     try:
         # Get router instance (will initialize if needed)
         try:
-            current_router = get_router()
+            from .services.openai_service import OpenAIVisionService
+            service = OpenAIVisionService()
         except Exception as e:
-            error_msg = f"VisionAPIRouter is not available: {str(e)}"
+            error_msg = f"OpenAI service is not available: {str(e)}"
             logger.error(error_msg)
             
             # Update receipt status to failed
             try:
                 receipt = Receipt.objects.get(id=receipt_id)
-                receipt.status = 'failed'
+                receipt.ocr_status = 'failed'
                 receipt.error_message = error_msg
                 receipt.save()
             except:
@@ -88,7 +110,7 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
         receipt = Receipt.objects.get(id=receipt_id)
         
         # Update status to processing
-        receipt.status = 'processing'
+        receipt.ocr_status = 'processing'
         receipt.save()
         
         logger.info(f"Starting OCR processing for receipt {receipt_id}")
@@ -98,23 +120,19 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
         asyncio.set_event_loop(loop)
         
         try:
-            # Process with router (handles API selection and fallback)
-            if use_v5:
-                # Use v0.5 method for enhanced processing
+            # Process with OpenAI service
+            if receipt.cloudinary_url:
+                # Use Cloudinary URL if available
                 result = loop.run_until_complete(
-                    current_router.openai_service.process_receipt_v5(
-                        receipt.image.file, 
-                        receipt.filename or f"receipt_{receipt_id}"
-                    )
+                    service.process_receipt_from_url(receipt.cloudinary_url)
+                )
+            elif receipt.file:
+                # Use local file
+                result = loop.run_until_complete(
+                    service.process_receipt_from_file(receipt.file.path)
                 )
             else:
-                # Use standard processing
-                result = loop.run_until_complete(
-                    current_router.process_receipt(
-                        receipt.image.file, 
-                        receipt.filename or f"receipt_{receipt_id}"
-                    )
-                )
+                raise Exception("No image file or URL available for processing")
             
             # Update receipt with extracted data
             if result.get('success'):
@@ -127,17 +145,38 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
                 receipt.receipt_date = extracted_data.get('date')
                 receipt.currency = extracted_data.get('currency', 'GBP')
                 receipt.extracted_data = extracted_data
-                receipt.status = 'completed'
+                receipt.ocr_status = 'completed'
                 
                 # Store API metadata
                 receipt.api_used = result.get('api_used', 'unknown')
                 receipt.processing_time = result.get('processing_time', 0)
                 receipt.confidence_score = result.get('confidence_score', 0)
                 
+                # Create Transaction record
+                if extracted_data.get('total') and float(extracted_data.get('total', 0)) > 0:
+                    from .models import Transaction
+                    try:
+                        total_amount = Decimal(str(extracted_data['total']))
+                        transaction_type = extracted_data.get('type', 'expense')
+                        
+                        Transaction.objects.update_or_create(
+                            receipt=receipt,
+                            defaults={
+                                'owner': receipt.owner,
+                                'total_amount': total_amount,
+                                'transaction_type': transaction_type,
+                                'vendor_name': extracted_data.get('vendor', 'Unknown'),
+                                'transaction_date': self._parse_date(extracted_data.get('date'))
+                            }
+                        )
+                        logger.info(f"Created transaction for receipt {receipt_id}: £{total_amount}")
+                    except Exception as e:
+                        logger.warning(f"Could not create transaction for receipt {receipt_id}: {e}")
+                
                 logger.info(f"Successfully processed receipt {receipt_id} with {receipt.api_used}")
                 
             else:
-                receipt.status = 'failed'
+                receipt.ocr_status = 'failed'
                 receipt.error_message = result.get('error', 'Unknown processing error')
                 logger.error(f"Failed to process receipt {receipt_id}: {receipt.error_message}")
             
@@ -165,10 +204,10 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
         # Log the error and retry if we haven't exceeded max retries
         logger.error(f"Error processing receipt {receipt_id}: {str(exc)}")
         
-        # Update receipt status to failed on final retry
+        # Update receipt status to failed
         try:
             receipt = Receipt.objects.get(id=receipt_id)
-            receipt.status = 'failed'
+            receipt.ocr_status = 'failed'
             receipt.error_message = str(exc)
             receipt.save()
         except:
