@@ -20,7 +20,7 @@ jobs:
       uses: akhileshns/heroku-deploy@v3.12.14
       with:
         heroku_api_key: ${{secrets.HEROKU_API_KEY}}
-        heroku_app_name: "smart-backend-56247d256139"
+        heroku_app_name: "smart-backend"
         heroku_email: ${{secrets.HEROKU_EMAIL}}
         appdir: "backend"
         usedocker: false
