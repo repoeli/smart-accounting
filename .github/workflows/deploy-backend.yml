@@ -1,0 +1,27 @@
+name: Deploy Backend to Heroku
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'backend/**'
+      - 'requirements-docker-stable.txt'
+      - '.env'
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Deploy Backend to Heroku
+      uses: akhileshns/heroku-deploy@v3.12.14
+      with:
+        heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+        heroku_app_name: "smart-backend-56247d256139"
+        heroku_email: ${{secrets.HEROKU_EMAIL}}
+        appdir: "backend"
+        usedocker: false
+        buildpack: "heroku/python"

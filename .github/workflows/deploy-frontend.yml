@@ -1,0 +1,25 @@
+name: Deploy Frontend to Heroku
+
+on:
+  push:
+    branches: [ main ]
+    paths: 
+      - 'frontend/**'
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    
+    - name: Deploy Frontend to Heroku
+      uses: akhileshns/heroku-deploy@v3.12.14
+      with:
+        heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+        heroku_app_name: "smart-frontend-198661fb5d01"
+        heroku_email: ${{secrets.HEROKU_EMAIL}}
+        appdir: "frontend"
+        usedocker: false
+        buildpack: "heroku/nodejs"
