@@ -12,24 +12,17 @@ extracted receipt data into actionable, exportable reports suitable for:
 All reports are secure, accurate, filterable, and exportable in standard formats.
 """
 
-import json
 from datetime import datetime, timedelta
-from decimal import Decimal
-from django.db.models import (
-    Q, Sum, Count, Avg, Max, Min, 
-    Case, When, Value, IntegerField, DecimalField
-)
-from django.db.models.functions import Coalesce, Extract, TruncMonth, TruncYear, TruncDay
+from django.db.models import Q, Sum, Count, Avg, Max, Min, DecimalField
+from django.db.models.functions import Extract, TruncMonth
 from django.utils import timezone
 from django.conf import settings
-from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
 from receipts.models import Receipt, Transaction
-from accounts.models import Account
 
 
 @api_view(['GET'])

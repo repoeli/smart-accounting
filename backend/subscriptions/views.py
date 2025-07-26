@@ -5,15 +5,10 @@ Provides API endpoints for subscription management and Stripe integration.
 
 import json
 import logging
-from decimal import Decimal
-from typing import Dict, Any
 
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
-from django.http import JsonResponse, HttpResponse
-from django.utils.decorators import method_decorator
-from django.views import View
+from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView

@@ -302,11 +302,6 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         """
         receipt = self.get_object()
         
-        # Debug logging
-        print(f"🔍 DEBUG: Received update request for receipt {receipt.id}")
-        print(f"🔍 DEBUG: Request data: {request.data}")
-        print(f"🔍 DEBUG: Current extracted_data: {receipt.extracted_data}")
-        
         if not receipt.extracted_data:
             receipt.extracted_data = {}
         
@@ -316,10 +311,8 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 old_value = receipt.extracted_data.get(field)
                 new_value = request.data[field]
                 receipt.extracted_data[field] = new_value
-                print(f"🔍 DEBUG: Updated {field}: {old_value} -> {new_value}")
         
         receipt.save()
-        print(f"🔍 DEBUG: Receipt saved with extracted_data: {receipt.extracted_data}")
 
         # Update associated transaction if total changed
         if 'total' in request.data or 'type' in request.data or 'vendor' in request.data or 'date' in request.data or 'category' in request.data:
@@ -336,10 +329,6 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     transaction.transaction_date = self._parse_date(request.data['date'])
                 if 'category' in request.data:
                     transaction.category = request.data['category']
-                    print(f"🔍 DEBUG: Updated transaction category to: {request.data['category']}")
-                
-                transaction.save()
-                print(f"🔍 DEBUG: Transaction saved with category: {transaction.category}")
                 
                 transaction.save()
             except Transaction.DoesNotExist:
