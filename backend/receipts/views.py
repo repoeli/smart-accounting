@@ -21,25 +21,62 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer
 # Temporarily commented out while fixing deployment issues
-# from .services.openai_service import process_receipt
+from .services.openai_service import OpenAIVisionService
 from .services.cloudinary_service import cloudinary_service
 from .utils import DecimalEncoder
 
 logger = logging.getLogger(__name__)
 
-# Temporary stub function to replace process_receipt during deployment fix
-async def temp_process_receipt_stub(file_path, use_url=False):
-    """Temporary stub to replace process_receipt functionality during deployment"""
-    return {
-        'success': True,
-        'message': 'Receipt processing temporarily disabled during backend fix',
-        'data': {
-            'merchant_name': 'Backend Fixing in Progress',
-            'total_amount': '0.00',
-            'transaction_date': '2025-01-01',
-            'items': []
+# Initialize OpenAI service
+openai_service = OpenAIVisionService()
+
+# Advanced process_receipt function using the optimized OpenAI service
+async def process_receipt(image_path_or_url, use_url=False):
+    """
+    Process receipt using the advanced OpenAI Vision service.
+    Returns extracted data in the new flat schema format.
+    """
+    try:
+        if use_url:
+            # Process using URL (Cloudinary)
+            result = await openai_service.process_receipt_from_url(image_path_or_url)
+        else:
+            # Process using local file path
+            result = await openai_service.process_receipt_from_file(image_path_or_url)
+        
+        # Convert to new schema format
+        if result and result.get('success'):
+            data = result.get('data', {})
+            return {
+                'success': True,
+                'extracted_data': {
+                    'vendor': data.get('merchant_name', 'Unknown'),
+                    'date': data.get('transaction_date'),
+                    'total': float(data.get('total_amount', 0)),
+                    'tax': float(data.get('tax_amount', 0)) if data.get('tax_amount') else None,
+                    'type': 'expense',
+                    'currency': data.get('currency', 'GBP')
+                },
+                'processing_metadata': {
+                    'processing_time': result.get('processing_time', 0),
+                    'cost_usd': result.get('cost_usd', 0),
+                    'token_usage': result.get('token_usage', 0),
+                    'confidence': result.get('confidence', 0)
+                }
+            }
+        else:
+            return {
+                'success': False,
+                'extracted_data': {},
+                'processing_metadata': {'error': result.get('message', 'Processing failed')}
+            }
+    except Exception as e:
+        logger.error(f"OpenAI processing error: {e}")
+        return {
+            'success': False,
+            'extracted_data': {},
+            'processing_metadata': {'error': str(e)}
         }
-    }
 
 
 class ReceiptViewSet(viewsets.ModelViewSet):
@@ -190,7 +227,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        result = loop.run_until_complete(temp_process_receipt_stub(receipt.cloudinary_url, use_url=True))
+                        result = loop.run_until_complete(process_receipt(receipt.cloudinary_url, use_url=True))
                     finally:
                         loop.close()
                 else:
@@ -205,7 +242,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(loop)
                         try:
-                            result = loop.run_until_complete(temp_process_receipt_stub(temp_file.name))
+                            result = loop.run_until_complete(process_receipt(temp_file.name))
                         finally:
                             loop.close()
 
@@ -281,7 +318,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                result = loop.run_until_complete(temp_process_receipt_stub(receipt.file.path))
+                result = loop.run_until_complete(process_receipt(receipt.file.path))
             finally:
                 loop.close()
 
