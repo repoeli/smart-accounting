@@ -397,8 +397,10 @@ if 'DYNO' in os.environ:
     # Running on Heroku
     HEROKU_DEPLOYMENT = True
     
-    # Optimize for Heroku's ephemeral filesystem
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    # Use local file storage for Heroku Student Pack (no S3)
+    # Files will be stored in the dyno's ephemeral filesystem
+    # and served via WhiteNoise for static files
+    DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
     
     # Use whitenoise for static files
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
