@@ -1,20 +1,20 @@
 services:
-  # PostgreSQL Database
-  db:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-smart_accounts}
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - db_data:/var/lib/postgresql/data
+  # PostgreSQL Database (DISABLED - Using Neon Cloud Database)
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  #     POSTGRES_DB: ${POSTGRES_DB:-smart_accounts}
+  #   ports:
+  #     - "5432:5432"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U postgres"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   volumes:
+  #     - db_data:/var/lib/postgresql/data
 
   # Redis for Celery
   redis:
@@ -30,7 +30,7 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
-  # Django Backend
+  # Django Backend (Using Neon Cloud Database)
   backend:
     build:
       context: .
@@ -42,14 +42,11 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-smart_accounts}
       - REDIS_URL=redis://redis:6379/0
       - DEBUG=True
       - PORT=8000
@@ -65,14 +62,11 @@ services:
       dockerfile: Dockerfile
     command: celery -A backend worker --loglevel=info --concurrency=4
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-smart_accounts}
       - REDIS_URL=redis://redis:6379/0
       - DEBUG=True
     volumes:
@@ -86,14 +80,11 @@ services:
       dockerfile: Dockerfile
     command: celery -A backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
       - .env
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-smart_accounts}
       - REDIS_URL=redis://redis:6379/0
       - DEBUG=True
     volumes:
@@ -123,5 +114,4 @@ services:
       - /app/node_modules
 
 volumes:
-  db_data:
   redis_data:
