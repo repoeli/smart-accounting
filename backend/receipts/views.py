@@ -87,7 +87,10 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         Returns new schema with extracted_data and processing_metadata.
         """
         try:
+            logger.info("Receipt upload started")
+            
             if 'image' not in request.FILES:
+                logger.error("No image file provided in request")
                 return Response(
                     {'error': 'No image file provided'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -95,10 +98,12 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
             image_file = request.FILES['image']
             description = getattr(request, 'data', {}).get('description', '') or request.POST.get('description', '')
+            logger.info(f"Processing upload for file: {image_file.name}, size: {image_file.size}")
 
             # Validate file type
             allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
             if image_file.content_type not in allowed_types:
+                logger.error(f"Invalid file type: {image_file.content_type}")
                 return Response(
                     {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
                     status=status.HTTP_400_BAD_REQUEST
@@ -106,18 +111,28 @@ class ReceiptViewSet(viewsets.ModelViewSet):
 
             # Validate file size (10MB limit)
             if image_file.size > 10 * 1024 * 1024:
+                logger.error(f"File too large: {image_file.size}")
                 return Response(
                     {'error': 'File too large. Maximum size: 10MB'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # Create receipt record with initial data
-            receipt = Receipt.objects.create(
-                owner=request.user,
-                file=image_file,  # Keep local storage as backup
-                original_filename=image_file.name,
-                ocr_status='processing'
-            )
+            try:
+                logger.info("Creating receipt record in database")
+                receipt = Receipt.objects.create(
+                    owner=request.user,
+                    file=image_file,  # Keep local storage as backup
+                    original_filename=image_file.name,
+                    ocr_status='processing'
+                )
+                logger.info(f"Receipt record created with ID: {receipt.id}")
+            except Exception as db_error:
+                logger.error(f"Database creation failed: {db_error}")
+                return Response(
+                    {'error': f'Database error: {str(db_error)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
             # Upload to Cloudinary with optimization
             cloudinary_success = False
