@@ -69,13 +69,8 @@ class ReceiptViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """Filter receipts by user - simplified for debugging"""
-        try:
-            return Receipt.objects.filter(owner=self.request.user).order_by('-uploaded_at')
-        except Exception as e:
-            logger.error(f"Error in get_queryset: {e}")
-            # Return empty queryset if there's an issue
-            return Receipt.objects.none()
+        """Return empty queryset temporarily to debug 500 error"""
+        return Receipt.objects.none()
 
     @method_decorator(csrf_exempt)
     def dispatch(self, request, *args, **kwargs):
