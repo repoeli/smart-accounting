@@ -11,9 +11,13 @@ import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import AppRoutes from './routes/AppRoutes';
 import NotificationSystem from './components/common/NotificationSystem';
-import './utils/apiTest'; // Import API test utility
-import './utils/devAuth'; // Import development authentication helper
 import './App.css';
+
+// Only import development utilities in development mode
+if (process.env.NODE_ENV === 'development') {
+  import('./utils/apiTest').catch(console.error);
+  import('./utils/devAuth').catch(console.error);
+}
 
 // Create Material-UI theme
 const theme = createTheme({
