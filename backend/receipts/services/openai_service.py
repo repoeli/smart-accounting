@@ -36,7 +36,7 @@ from PIL import Image  # type: ignore
 from tenacity import retry, stop_after_attempt, wait_random_exponential  # type: ignore
 
 from .receipt_parser import encode_image  # heavy image work
-from .data_validator import DataValidator  # user-uploaded validator
+from .data_validator import ReceiptDataValidator  # user-uploaded validator
 from .openai_schema import UK_RECEIPT_JSON_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -152,9 +152,10 @@ class OpenAIVisionService:
 
         # --- Validation / self-repair -----------------------------------
         try:
-            errors, fixed = DataValidator.validate_and_fix(merged)
-            if fixed:
-                merged.update(fixed)
+            validator = ReceiptDataValidator()
+            cleaned_data = validator.validate_and_clean(merged)
+            errors = []  # No separate error handling in this method
+            merged.update(cleaned_data)  # Update with cleaned data
         except Exception as e:  # validator is optional safety net
             logger.warning("Validator error: %s", e)
             errors = ["validator_exception"]
