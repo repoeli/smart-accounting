@@ -87,7 +87,21 @@ class OpenAIVisionService:
     def __init__(self):
         if not settings.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not configured")
-        self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, http2=True)
+        
+        # Handle test/development environments
+        is_test_env = (
+            settings.OPENAI_API_KEY.startswith('sk-test-') or 
+            settings.OPENAI_API_KEY.startswith('test-') or
+            settings.DEBUG and 'test' in settings.OPENAI_API_KEY.lower()
+        )
+        
+        if is_test_env:
+            # In test environment, create a mock client to prevent API calls
+            self.async_client = None
+            logger.warning("Running in test mode - OpenAI client disabled")
+        else:
+            self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, http2=True)
+            
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT
         self.metrics: Dict[str, Union[int, Decimal]] = {
