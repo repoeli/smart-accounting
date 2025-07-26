@@ -122,11 +122,19 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 logger.info("Creating receipt record in database")
                 receipt = Receipt.objects.create(
                     owner=request.user,
-                    file=image_file,  # Keep local storage as backup
                     original_filename=image_file.name,
                     ocr_status='processing'
                 )
                 logger.info(f"Receipt record created with ID: {receipt.id}")
+                
+                # Save the file separately to handle S3 storage properly
+                logger.info("Saving uploaded file to storage")
+                receipt.file.save(
+                    name=image_file.name,
+                    content=image_file,
+                    save=True
+                )
+                logger.info(f"File saved successfully for receipt {receipt.id}")
             except Exception as db_error:
                 logger.error(f"Database creation failed: {db_error}")
                 return Response(
