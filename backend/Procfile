@@ -1,4 +1,4 @@
 release: bash release.sh
 web: gunicorn backend.wsgi:application --bind 0.0.0.0:$PORT --workers 3 --timeout 120
-worker: celery -A backend.celery worker --loglevel=info --concurrency=2
+worker: celery -A backend.celery worker --loglevel=info --pool=threads --concurrency=4 --max-tasks-per-child=50 --without-gossip --without-mingle --without-heartbeat
 beat: celery -A backend.celery beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
