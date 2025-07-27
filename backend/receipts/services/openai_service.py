@@ -43,17 +43,21 @@ except Exception:  # noqa: BLE001
     cl_upload = None
 
 from .receipt_parser import encode_image  # heavy image work
+# Validator import compatibility: support both class names; fallback shim
 try:
-    from .data_validator import ReceiptDataValidator as DataValidator  # user-uploaded validator
-except Exception:  # pragma: no cover – fallback when validator missing
-    class DataValidator:  # shim – keeps interface stable
-        @staticmethod
-        def validate_and_clean(payload: Dict[str, Any]):
-            return payload
-        
-        @staticmethod
-        def validate_and_fix(payload: Dict[str, Any]):
-            return [], {}
+    from .data_validator import DataValidator  # preferred
+except Exception:
+    try:
+        from .data_validator import ReceiptDataValidator as DataValidator  # alt name
+    except Exception:  # pragma: no cover – fallback when validator missing
+        class DataValidator:  # shim – keeps interface stable
+            @staticmethod
+            def validate_and_clean(payload: Dict[str, Any]):
+                return payload
+            
+            @staticmethod
+            def validate_and_fix(payload: Dict[str, Any]):
+                return [], {}
 
 from .openai_schema import UK_RECEIPT_JSON_SCHEMA
 
@@ -71,38 +75,6 @@ __all__ = [
     "reset_metrics",
     "safe_enqueue",
     "queue_ocr_task",
-]
-
-import asyncio
-import base64
-import concurrent.futures
-import json
-import logging
-import os
-import statistics
-import time
-from decimal import Decimal
-from io import BytesIO
-from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
-
-import httpx
-from django.conf import settings
-from openai import AsyncOpenAI
-from PIL import Image  # type: ignore
-from tenacity import retry, stop_after_attempt, wait_random_exponential  # type: ignore
-
-from .receipt_parser import encode_image  # heavy image work
-from .data_validator import ReceiptDataValidator  # user-uploaded validator
-from .openai_schema import UK_RECEIPT_JSON_SCHEMA
-
-logger = logging.getLogger(__name__)
-
-__all__ = [
-    "OpenAIVisionService",
-    "validate_api_key",
-    "get_metrics",
-    "reset_metrics",
 ]
 
 # ---------------------------------------------------------------------------
@@ -219,6 +191,7 @@ class OpenAIVisionService:
     """
 
     def __init__(self):
+        # Read key from Django settings or env (Heroku-safe)
         api_key = getattr(settings, 'OPENAI_API_KEY', None) or os.environ.get('OPENAI_API_KEY', '')
         
         if not api_key:
