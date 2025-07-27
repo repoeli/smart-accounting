@@ -238,7 +238,7 @@ class OpenAIVisionService:
                 logger.warning("Cloudinary path failed: %s", exc)
 
         # (2) Heavy pre-processing / tiling for OCR ------------------------
-        segments: List[Tuple[int, str]] = await loop.run_in_executor(self.thread_pool, encode_image, path_ref, high_res)
+        segments: List[Tuple[int, str]] = await encode_image(path_ref, high_res)
         if not segments:
             raise ImageProcessingError("encode_image returned no segments")
 
