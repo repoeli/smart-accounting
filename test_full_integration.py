@@ -46,7 +46,7 @@ def test_full_pipeline():
         )
         
         receipt = Receipt.objects.create(
-            user=user,
+            owner=user,
             original_filename='ASDA1.jpg',
             ocr_status='pending'
         )
@@ -112,7 +112,7 @@ def test_receipt_model_fields():
         )
         
         receipt = Receipt.objects.create(
-            user=user,
+            owner=user,
             original_filename='fieldtest.jpg',
             ocr_status='pending'
         )

@@ -51,7 +51,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_yasg",
     "rest_framework_simplejwt",
-    "django_celery_beat",  # For periodic tasks
     
     # Project apps
     "accounts",
@@ -348,103 +347,39 @@ SWAGGER_SETTINGS = {
 # HEROKU PERFORMANCE OPTIMIZATIONS
 # ===============================================
 
-# Celery Configuration for Background Tasks with Web Dyno Safety
-import ssl
+# Enhanced Receipt Processing Configuration
+# =========================================
+# Configuration for the enhanced OpenAI + Cloudinary system
+# Uses ThreadPoolExecutor instead of Celery for better Heroku compatibility
 
-# Heroku-safe Celery configuration with dyno role detection
-# Prefer TLS URL from Heroku Redis
-REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-_broker = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_TLS_URL") or REDIS_URL
-
-if _broker.startswith("redis://"):      # force TLS on Heroku
-    _broker = _broker.replace("redis://", "rediss://", 1)
-
-# Detect dyno role: web.* should not connect to result backend
-_dyno = os.getenv("DYNO", "")
-_is_web_dyno = _dyno.startswith("web.")
-
-# Debug logging for dyno detection
 import logging
 logger = logging.getLogger(__name__)
-logger.info(f"Dyno detection: DYNO={_dyno}, is_web_dyno={_is_web_dyno}")
 
-# Allow explicit override via env (1=disable result backend everywhere)
-_disable_result = os.getenv("DISABLE_CELERY_RESULT", "0") == "1"
+# OpenAI Configuration
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4o')
 
-# Configure Celery with SSL support for Heroku Redis
-CELERY_BROKER_URL = _broker
+# Cloudinary Configuration
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')  
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
 
-# Result backend logic:
-#  - On worker/beat dynos: use Redis result backend (default).
-#  - On web dynos or when disabled: no result backend and ignore results.
-if _is_web_dyno or _disable_result:
-    CELERY_RESULT_BACKEND = None
-    CELERY_TASK_IGNORE_RESULT = True
-    CELERY_RESULT_EXTENDED = False
-    logger.info(f"Web dyno detected: Disabling Celery result backend")
-else:
-    CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", _broker)
-    CELERY_TASK_IGNORE_RESULT = False
-    CELERY_RESULT_EXTENDED = False
-    logger.info(f"Worker dyno detected: Enabling Celery result backend")
-
-# TLS for broker/result (Heroku Redis supports CA‑signed certs; you can set 'required')
-_use_ssl = os.getenv("CELERY_BROKER_USE_SSL", "1") == "1"
-_cert_reqs = os.getenv("CELERY_SSL_CERT_REQS", "none")   # 'required' if you want strict verify
-
-if _use_ssl:
-    _ssl_cfg = {"ssl_cert_reqs": ssl.CERT_NONE if _cert_reqs == "none" else ssl.CERT_REQUIRED}
-    CELERY_BROKER_USE_SSL = _ssl_cfg
-    if not (_is_web_dyno or _disable_result):  # Only set Redis backend SSL if result backend is enabled
-        CELERY_REDIS_BACKEND_USE_SSL = _ssl_cfg
-
-# Network resilience on Heroku
-CELERY_BROKER_TRANSPORT_OPTIONS = {
-    "visibility_timeout": 60 * 30,
-    "socket_keepalive": True,
-    "socket_timeout": 5,
-    "retry_on_timeout": True,
-    "max_connections": 10,
+# Enhanced Receipt Processing Settings
+RECEIPT_PROCESSING = {
+    'max_processing_time': 120,  # seconds
+    'thread_pool_workers': 3,    # for background processing
+    'image_enhancement': True,   # enable image preprocessing
+    'focused_extraction': True,  # use focused field extraction
+    'cloudinary_optimization': True,  # optimize images on upload
 }
 
-if not (_is_web_dyno or _disable_result):  # Only set result backend options if enabled
-    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_on_timeout": True}
+# Validate critical settings
+if not OPENAI_API_KEY:
+    logger.warning("OPENAI_API_KEY not set - receipt processing will fail")
+if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+    logger.warning("Cloudinary credentials incomplete - image storage may fail")
 
-# Additional Celery settings
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'
-CELERY_ENABLE_UTC = True
-
-# Worker behaviour
-CELERY_TASK_ACKS_LATE = True
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_TASK_TIME_LIMIT = 120
-CELERY_TASK_SOFT_TIME_LIMIT = 90
-
-# Connection retry settings for Redis SSL issues
-CELERY_BROKER_CONNECTION_RETRY = True
-CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
-CELERY_REDIS_SOCKET_CONNECT_TIMEOUT = 30
-
-# Performance settings for Celery
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_TASK_ACKS_LATE = True
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 100
-CELERY_TASK_TIME_LIMIT = 720  # 12 minutes
-CELERY_TASK_SOFT_TIME_LIMIT = 600  # 10 minutes
-CELERY_RESULT_EXPIRES = 3600  # 1 hour
-
-# Task routing
-CELERY_TASK_ROUTES = {
-    'receipts.tasks.process_receipt_task': {'queue': 'ocr_processing'},
-    'receipts.tasks.batch_process_receipts': {'queue': 'ocr_batch'},
-    'receipts.tasks.cleanup_temp_files': {'queue': 'maintenance'},
-}
-
-# HTTP/2 and Connection Pooling Settings
+# HTTP/2 and Connection Pooling Settings for OpenAI
 HTTP_CLIENT_SETTINGS = {
     'http2': True,
     'max_keepalive_connections': 20,
@@ -485,7 +420,7 @@ if 'DYNO' in os.environ:
 else:
     HEROKU_DEPLOYMENT = False
 
-# Django Logging Configuration
+# Django Logging Configuration  
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -502,7 +437,7 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'verbose' if DEBUG else 'simple',
         },
     },
     'loggers': {
@@ -521,12 +456,7 @@ LOGGING = {
             'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
             'propagate': True,
         },
-        'receipts.tasks': {
-            'handlers': ['console'],
-            'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
-            'propagate': True,
-        },
-        'celery': {
+        'enhanced_openai_service': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': True,

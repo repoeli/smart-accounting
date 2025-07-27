@@ -20,64 +20,62 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer
-from .services.openai_service import OpenAIVisionService
+from .services.enhanced_openai_service import EnhancedOpenAIVisionService
 from .utils import DecimalEncoder
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI service lazily to avoid import-time errors
-openai_service = None
+# Initialize Enhanced OpenAI service
+enhanced_openai_service = None
 
-def get_openai_service():
-    """Get OpenAI service instance, creating it if needed."""
-    global openai_service
-    if openai_service is None:
-        openai_service = OpenAIVisionService()
-    return openai_service
+def get_enhanced_openai_service():
+    """Get Enhanced OpenAI service instance, creating it if needed."""
+    global enhanced_openai_service
+    if enhanced_openai_service is None:
+        enhanced_openai_service = EnhancedOpenAIVisionService()
+    return enhanced_openai_service
 
-# Advanced process_receipt function using the optimized OpenAI service
+# Advanced process_receipt function using the enhanced OpenAI service
 async def process_receipt(image_path_or_url, use_url=False):
     """
-    Process receipt using the advanced OpenAI Vision service.
-    Returns extracted data in the new flat schema format.
+    Process receipt using the enhanced OpenAI Vision service.
+    Returns extracted data in the focused essential fields format.
     """
     try:
-        service = get_openai_service()
+        service = get_enhanced_openai_service()
+        
+        # Process using enhanced focused extraction
         if use_url:
-            # Process using URL (Cloudinary)
-            result = await service.process_receipt_from_url(image_path_or_url)
+            # For URL processing, we'll download and process locally for now
+            import requests
+            response = requests.get(image_path_or_url)
+            from io import BytesIO
+            image_file = BytesIO(response.content)
+            result = await service.process_receipt_focused(image_file, "remote_image.jpg")
         else:
             # Process using local file path
-            result = await service.process_receipt_from_file(image_path_or_url)
+            result = await service.process_receipt_focused(image_path_or_url, "uploaded_image.jpg")
         
-        # Convert to new schema format
-        if result and result.get('success'):
-            data = result.get('data', {})
-            return {
-                'success': True,
-                'extracted_data': {
-                    'vendor': data.get('merchant_name', 'Unknown'),
-                    'date': data.get('transaction_date'),
-                    'total': float(data.get('total_amount', 0)),
-                    'tax': float(data.get('tax_amount', 0)) if data.get('tax_amount') else None,
-                    'type': 'expense',
-                    'currency': data.get('currency', 'GBP')
-                },
-                'processing_metadata': {
-                    'processing_time': result.get('processing_time', 0),
-                    'cost_usd': result.get('cost_usd', 0),
-                    'token_usage': result.get('token_usage', 0),
-                    'confidence': result.get('confidence', 0)
-                }
-            }
-        else:
-            return {
-                'success': False,
-                'extracted_data': {},
-                'processing_metadata': {'error': result.get('message', 'Processing failed')}
-            }
+        # Return in the format expected by existing frontend
+        return {
+            'success': True,
+            'extracted_data': {
+                'vendor': result.get('vendor_name', 'Unknown'),
+                'date': result.get('transaction_date'),
+                'total': result.get('total_amount', 0),
+                'tax': result.get('tax_amount', 0),
+                'type': result.get('transaction_type', 'expense'),
+                'currency': result.get('currency', 'USD'),
+                'subtotal': result.get('subtotal_amount', 0),
+                'discount_amount': result.get('discount_amount', 0),
+                'number_of_items': result.get('number_of_items'),
+                'cloudinary_url': result.get('cloudinary_url')
+            },
+            'processing_metadata': result.get('processing_metadata', {})
+        }
+        
     except Exception as e:
-        logger.error(f"OpenAI processing error: {e}")
+        logger.error(f"Enhanced OpenAI processing error: {e}")
         return {
             'success': False,
             'extracted_data': {},
@@ -196,7 +194,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             receipt.save()
 
             # Process with Celery background task (ASYNC) or fallback to sync
-            from .services.openai_service import queue_ocr_task
+            from .services.enhanced_openai_service import queue_ocr_task
             
             # Set initial status to processing
             receipt.ocr_status = 'processing'
@@ -247,7 +245,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 # Fallback to synchronous processing when Celery is unavailable
                 try:
                     # Process receipt synchronously using asyncio
-                    service = get_openai_service()
+                    service = get_enhanced_openai_service()
                     
                     # Check if we're in test mode (OpenAI service disabled)
                     if service.async_client is None:
@@ -269,7 +267,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         # Define async processing function
                         async def process_sync():
                             # Use the local file for processing (Cloudinary is just for display)
-                            return await service.process_receipt(receipt.file, receipt.original_filename)
+                            return await service.process_receipt_focused(receipt.file, receipt.original_filename)
                         
                         # Run the async processing
                         result = asyncio.run(process_sync())
@@ -366,7 +364,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        from .services.openai_service import queue_ocr_task
+        from .services.enhanced_openai_service import queue_ocr_task
         
         # Reset status
         receipt.ocr_status = 'processing'
@@ -415,7 +413,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             # Fallback to synchronous processing when Celery is unavailable
             try:
                 # Process receipt synchronously using asyncio
-                service = get_openai_service()
+                service = get_enhanced_openai_service()
                 
                 # Check if we're in test mode (OpenAI service disabled)
                 if service.async_client is None:
@@ -438,7 +436,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     # Define async processing function
                     async def process_sync():
                         # Use the local file for processing (Cloudinary is just for display)
-                        return await service.process_receipt(receipt.file, receipt.original_filename)
+                        return await service.process_receipt_focused(receipt.file, receipt.original_filename)
                     
                     # Run the async processing
                     result = asyncio.run(process_sync())
