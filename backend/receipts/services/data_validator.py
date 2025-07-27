@@ -432,3 +432,8 @@ class ReceiptDataValidator:
         
         final_confidence = max(0, min(100, base_confidence + adjustments))
         return final_confidence
+
+
+# Back-compat alias so services can import either class name
+class DataValidator(ReceiptDataValidator):
+    pass

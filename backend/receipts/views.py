@@ -21,7 +21,6 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Receipt, Transaction
 from .serializers import ReceiptSerializer, TransactionSerializer
 from .services.openai_service import OpenAIVisionService
-from .services.cloudinary_service import cloudinary_service
 from .utils import DecimalEncoder
 
 logger = logging.getLogger(__name__)
@@ -194,36 +193,6 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            # Upload to Cloudinary with optimization
-            cloudinary_success = False
-            try:
-                if cloudinary_service.is_configured:
-                    cloudinary_result = cloudinary_service.upload_receipt_image(
-                        file=image_file,
-                        receipt_id=receipt.id,
-                        user_id=request.user.id,
-                        filename=image_file.name
-                    )
-                    
-                    # Update receipt with Cloudinary data
-                    receipt.cloudinary_public_id = cloudinary_result['public_id']
-                    receipt.cloudinary_url = cloudinary_result['original_url']
-                    receipt.cloudinary_display_url = cloudinary_result['urls'].get('display', cloudinary_result['original_url'])
-                    receipt.cloudinary_thumbnail_url = cloudinary_result['urls'].get('thumbnail', cloudinary_result['original_url'])
-                    receipt.image_width = cloudinary_result.get('width')
-                    receipt.image_height = cloudinary_result.get('height')
-                    receipt.file_size_bytes = cloudinary_result.get('size_bytes')
-                    cloudinary_success = True
-                    
-                    logger.info(f"Successfully uploaded receipt {receipt.id} to Cloudinary: {cloudinary_result['public_id']}")
-                else:
-                    logger.info(f"Cloudinary not configured, using local storage for receipt {receipt.id}")
-                    
-            except Exception as cloudinary_error:
-                logger.warning(f"Cloudinary upload failed for receipt {receipt.id}: {cloudinary_error}")
-                # Local storage is already set as backup
-                logger.info(f"Falling back to local storage for receipt {receipt.id}")
-            
             receipt.save()
 
             # Process with Celery background task (ASYNC) or fallback to sync
