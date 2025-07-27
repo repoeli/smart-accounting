@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 
 from .models import Receipt
-from .services.vision_api_router import VisionAPIRouter
+from .services.openai_service import OpenAIVisionService
 
 logger = logging.getLogger(__name__)
 
@@ -38,37 +38,37 @@ def _parse_date(date_str):
     except:
         return date.today()
 
-# Create a single router instance for task processing with error handling
-router = None
-router_error = None
+# Create a single service instance for task processing with error handling
+service = None
+service_error = None
 
-def get_router():
-    """Get the VisionAPIRouter instance, initializing if needed"""
-    global router, router_error
+def get_service():
+    """Get the OpenAIVisionService instance, initializing if needed"""
+    global service, service_error
     
-    if router is not None:
-        return router
+    if service is not None:
+        return service
     
-    if router_error is not None:
+    if service_error is not None:
         # Don't retry if we already failed
-        raise Exception(f"VisionAPIRouter initialization previously failed: {router_error}")
+        raise Exception(f"OpenAIVisionService initialization previously failed: {service_error}")
     
     try:
-        from .services.vision_api_router import VisionAPIRouter
-        router = VisionAPIRouter()
-        logger.info("VisionAPIRouter initialized successfully")
-        return router
+        from .services.openai_service import OpenAIVisionService
+        service = OpenAIVisionService()
+        logger.info("OpenAIVisionService initialized successfully")
+        return service
     except Exception as e:
-        router_error = str(e)
-        logger.error(f"Failed to initialize VisionAPIRouter: {e}")
-        raise Exception(f"VisionAPIRouter initialization failed: {e}")
+        service_error = str(e)
+        logger.error(f"Failed to initialize OpenAIVisionService: {e}")
+        raise Exception(f"OpenAIVisionService initialization failed: {e}")
 
-# Try to initialize router on import, but don't fail if it doesn't work
+# Try to initialize service on import, but don't fail if it doesn't work
 try:
-    router = get_router()
+    service = get_service()
 except Exception as e:
-    logger.warning(f"Initial router initialization failed: {e}. Will retry on task execution.")
-    router = None
+    logger.warning(f"Initial service initialization failed: {e}. Will retry on task execution.")
+    service = None
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str, Any]:
@@ -83,10 +83,9 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
         Dict containing processing results and metadata
     """
     try:
-        # Get router instance (will initialize if needed)
+        # Get service instance (will initialize if needed)
         try:
-            from .services.openai_service import OpenAIVisionService
-            service = OpenAIVisionService()
+            service = get_service()
         except Exception as e:
             error_msg = f"OpenAI service is not available: {str(e)}"
             logger.error(error_msg)
@@ -166,7 +165,7 @@ def process_receipt_task(self, receipt_id: int, use_v5: bool = True) -> Dict[str
                                 'total_amount': total_amount,
                                 'transaction_type': transaction_type,
                                 'vendor_name': extracted_data.get('vendor', 'Unknown'),
-                                'transaction_date': self._parse_date(extracted_data.get('date'))
+                                'transaction_date': _parse_date(extracted_data.get('date'))
                             }
                         )
                         logger.info(f"Created transaction for receipt {receipt_id}: £{total_amount}")
