@@ -13,7 +13,6 @@ Everything else you already had (tile concurrency, Costco fixes, totals/tax/item
 rescue, validator shim) stays intact. **No public function names, return types,
 or module structure changed.**
 """
-from __future__ import annotations
 
 import asyncio
 import base64
@@ -73,7 +72,6 @@ __all__ = [
     "safe_enqueue",
     "queue_ocr_task",
 ]
-from __future__ import annotations
 
 import asyncio
 import base64
