@@ -3,7 +3,11 @@ Celery Configuration for Heroku Deployment
 Optimized for receipt OCR background processing
 """
 import os
+import sys
 from celery import Celery
+
+# Add the project directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # Set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
