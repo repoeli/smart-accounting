@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-openai_service.py – v1.0 (Cloudinary + Costco fix, single‑model, BC safe)
+openai_service.py - v1.0 (Cloudinary + Costco fix, single-model, BC safe)
 =======================================================================
 This version **adds an optional Cloudinary upload step** that:
   • **Resizes** the *original* uploaded receipt to a bounded long-edge (default 1280px)
@@ -87,6 +87,9 @@ COST_PER_1K_OUTPUT = Decimal("0.01")
 THREADS = min(8, (os.cpu_count() or 1) + 4)
 MAX_TOKENS_TILE = int(os.getenv("OPENAI_MAX_TOKENS_TILE", "600"))
 OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "30"))
+# Local, broker-less async execution (no Celery/Redis needed)
+OCR_LOCAL_ASYNC = os.getenv("OCR_LOCAL_ASYNC", "1") == "1"  # default on
+OCR_LOCAL_WORKERS = int(os.getenv("OCR_LOCAL_WORKERS", "2"))
 
 # Cloudinary knobs (all optional, tuned for free tier)
 CLOUDINARY_ENABLED = bool(getattr(settings, "CLOUDINARY_URL", os.getenv("CLOUDINARY_URL", "")))
@@ -183,6 +186,9 @@ def _prepare_and_upload_cloudinary(path: Path, filename: str) -> Dict[str, Any]:
         return {}
 
 # ---------------------------------------------------------------------------
+# Lightweight local executor for broker-less background execution
+_local_bg_executor = concurrent.futures.ThreadPoolExecutor(max_workers=OCR_LOCAL_WORKERS)
+
 class OpenAIVisionService:
     """OpenAI GPT‑4o Vision backend with concurrency, hints, Costco & Cloudinary.
 
@@ -203,7 +209,7 @@ class OpenAIVisionService:
         except Exception as e:
             logger.error(f"Failed to initialize OpenAI client: {e}")
             raise
-            
+        
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT
         self.metrics: Dict[str, Union[int, Decimal]] = {
@@ -434,85 +440,170 @@ def _fuse_split_lines(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return fused
 
 # ---------------------------------------------------------------------------
-# Safe enqueue helpers (Celery queue resilience for web dynos)
+# Broker-less background execution (no Celery/Redis required)
 # ---------------------------------------------------------------------------
 
-def safe_enqueue(task_func, *args, **kwargs) -> dict:
-    """Safe wrapper for Celery task.apply_async() with comprehensive fallback.
+def _discover_receipt_path(receipt) -> Path | None:
+    cand = ["file", "image", "upload", "document"]
+    for attr in cand:
+        fld = getattr(receipt, attr, None)
+        try:
+            p = Path(getattr(fld, "path", ""))
+            if p.exists():
+                return p
+        except Exception:
+            continue
+    return None
 
-    Returns dict with keys:
-      - "queued": bool (True if submitted to broker or ran eagerly)
-      - "eager": bool (True if ran synchronously)
-      - "deferred": bool (True if broker unavailable, should retry later)
+
+def _process_receipt_for_id_local(receipt_id: int) -> None:
+    """In-process background job: load receipt by id, run OCR, persist results.
+    This mimics the Celery task behaviour but avoids any broker.
     """
     import logging
+    from django.db import transaction
+    logger = logging.getLogger(__name__)
+    try:
+        from receipts.models import Receipt  # type: ignore
+    except Exception as exc:
+        logger.error("Local OCR: cannot import Receipt model: %s", exc)
+        return
+
+    try:
+        r = Receipt.objects.get(pk=receipt_id)
+    except Exception as exc:
+        logger.error("Local OCR: receipt %s not found: %s", receipt_id, exc)
+        return
+
+    # Mark processing if model has such a field
+    try:
+        if hasattr(r, "ocr_status"):
+            r.ocr_status = "processing"
+            r.save(update_fields=["ocr_status"])  # type: ignore[arg-type]
+    except Exception:
+        pass
+
+    path = _discover_receipt_path(r)
+    if not path:
+        logger.error("Local OCR: receipt %s has no readable file path", receipt_id)
+        try:
+            if hasattr(r, "ocr_status"):
+                r.ocr_status = "failed"
+                r.save(update_fields=["ocr_status"])  # type: ignore[arg-type]
+        except Exception:
+            pass
+        return
+
+    try:
+        svc = _singleton_service()
+        with open(path, "rb") as fh:
+            result = asyncio.run(svc.process_receipt(fh, filename=path.name))
+        # Persist result back conservatively without assuming exact field names
+        changed = False
+        if hasattr(r, "extracted_data"):
+            setattr(r, "extracted_data", result)
+            changed = True
+        if hasattr(r, "data"):
+            setattr(r, "data", result)
+            changed = True
+        if hasattr(r, "ocr_status"):
+            setattr(r, "ocr_status", "completed")
+            changed = True
+        if changed:
+            try:
+                r.save()
+            except Exception:
+                # Try narrower updates to avoid JSONField vs TextField mismatches
+                try:
+                    if hasattr(r, "ocr_status"):
+                        r.save(update_fields=["ocr_status"])  # type: ignore[arg-type]
+                except Exception:
+                    pass
+    except Exception as exc:
+        logger.exception("Local OCR: processing failed for %s: %s", receipt_id, exc)
+        try:
+            if hasattr(r, "ocr_status"):
+                r.ocr_status = "failed"
+                r.save(update_fields=["ocr_status"])  # type: ignore[arg-type]
+        except Exception:
+            pass
+
+
+def safe_enqueue(task, *args, **kwargs) -> dict:
+    """Enqueue a task if Celery is available, else run locally in a thread.
+
+    Returns {"queued": bool, "eager": bool, "deferred": bool}.
+    """
+    import os, logging
     logger = logging.getLogger(__name__)
     
+    logger.info(f"safe_enqueue called with OCR_LOCAL_ASYNC={OCR_LOCAL_ASYNC}, DISABLE_CELERY={os.getenv('DISABLE_CELERY', '0')}")
+
+    use_local = OCR_LOCAL_ASYNC or os.getenv("DISABLE_CELERY", "0") == "1"
+    if use_local:
+        try:
+            logger.info(f"Submitting task {task} to local executor with args {args}")
+            _local_bg_executor.submit(task, *args, **kwargs)
+            logger.info("Task submitted successfully to local executor")
+            return {"queued": True, "eager": False, "deferred": False}
+        except Exception as exc:
+            logger.warning("safe_enqueue local submit failed: %s", exc)
+            return {"queued": False, "eager": False, "deferred": True}
+
     try:
-        logger.info(f"Attempting to queue task {task_func.__name__} with args {args}")
-        
-        # Try to queue the task
-        result = task_func.apply_async(args=args, kwargs=kwargs)
-        logger.info(f"Successfully queued task {task_func.__name__}: {result.id}")
-        return {"queued": True, "eager": False, "deferred": False, "task_id": result.id}
-        
-    except Exception as exc:
-        logger.warning(f"Celery apply_async failed for {task_func.__name__}: {exc}")
-        
-        # Check if this is a connection error (broker unavailable)
-        exc_str = str(exc).lower()
-        if any(term in exc_str for term in ["connection", "broker", "redis", "timeout"]):
-            logger.info(f"Broker connection issue, attempting eager execution for {task_func.__name__}")
-            
-            # Try eager execution as fallback
-            try:
-                from django.conf import settings
-                # Temporarily enable eager execution
-                original_eager = getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)
-                settings.CELERY_TASK_ALWAYS_EAGER = True
-                
-                result = task_func.apply_async(args=args, kwargs=kwargs)
-                logger.info(f"Successfully executed task {task_func.__name__} eagerly")
-                
-                # Restore original setting
-                settings.CELERY_TASK_ALWAYS_EAGER = original_eager
-                
-                return {"queued": True, "eager": True, "deferred": False}
-                
-            except Exception as inner:
-                logger.error(f"Eager execution also failed for {task_func.__name__}: {inner}")
-                # Restore original setting
-                try:
-                    settings.CELERY_TASK_ALWAYS_EAGER = original_eager
-                except:
-                    pass
-                return {"queued": False, "eager": False, "deferred": True, "error": str(inner)}
-        
-        # For other errors, don't defer
-        logger.error(f"Task queuing failed with non-broker error for {task_func.__name__}: {exc}")
-        return {"queued": False, "eager": False, "deferred": False, "error": str(exc)}
+        from celery.exceptions import CeleryError  # type: ignore
+    except Exception:
+        CeleryError = Exception  # type: ignore
+
+    try:
+        logger.info(f"Attempting to queue task {task} via Celery")
+        task.delay(*args, **kwargs)
+        logger.info("Task queued successfully via Celery")
+        return {"queued": True, "eager": False, "deferred": False}
+    except CeleryError as exc:
+        logger.warning("safe_enqueue deferred due to broker error: %s", exc)
+        return {"queued": False, "eager": False, "deferred": True}
 
 
 def queue_ocr_task(receipt_id: int) -> dict:
-    """Convenience wrapper for OCR receipt processing.
+    """Queue OCR by id.
 
-    Lazily imports `process_receipt_task` so this module loads even where Celery
-    isn't present. Returns the same dict as `safe_enqueue`.
+    Preferred: if Celery task is importable *and* DISABLE_CELERY!=1 and OCR_LOCAL_ASYNC==0,
+    enqueue to Celery. Otherwise run locally on the in-process thread pool.
     """
-    import logging
+    import logging, os
     logger = logging.getLogger(__name__)
     
     logger.info(f"queue_ocr_task called for receipt {receipt_id}")
-    
+    logger.info(f"Environment: OCR_LOCAL_ASYNC={OCR_LOCAL_ASYNC}, DISABLE_CELERY={os.getenv('DISABLE_CELERY', '0')}")
+
+    # Local path: submit our internal runner
+    if OCR_LOCAL_ASYNC or os.getenv("DISABLE_CELERY", "0") == "1":
+        try:
+            logger.info(f"Using local background processing for receipt {receipt_id}")
+            _local_bg_executor.submit(_process_receipt_for_id_local, receipt_id)
+            logger.info("Local OCR queued for receipt %s", receipt_id)
+            return {"queued": True, "eager": False, "deferred": False}
+        except Exception as exc:
+            logger.error("Local OCR submit failed: %s", exc)
+            return {"queued": False, "eager": False, "deferred": True}
+
+    # Celery path if available
     try:
         from receipts.tasks import process_receipt_task  # type: ignore
-        logger.info("Successfully imported process_receipt_task")
-    except Exception as exc:  # keep import errors from crashing web dynos
-        logger.error("queue_ocr_task: cannot import process_receipt_task: %s", exc)
-        return {"queued": False, "eager": False, "deferred": True, "error": f"Import failed: {exc}"}
-    
+        logger.info("Celery task found, attempting to use Celery queue")
+    except Exception as exc:
+        logger.warning("Celery task missing; falling back to local OCR: %s", exc)
+        try:
+            logger.info(f"Falling back to local processing for receipt {receipt_id}")
+            _local_bg_executor.submit(_process_receipt_for_id_local, receipt_id)
+            return {"queued": True, "eager": False, "deferred": False}
+        except Exception as inner:
+            logger.error("Local OCR submit failed: %s", inner)
+            return {"queued": False, "eager": False, "deferred": True}
+
     result = safe_enqueue(process_receipt_task, receipt_id)
-    logger.info(f"queue_ocr_task result for receipt {receipt_id}: {result}")
+    logger.info(f"queue_ocr_task result: {result}")
     return result
 
 # ---------------------------------------------------------------------------
@@ -528,7 +619,7 @@ def _singleton_service() -> OpenAIVisionService:
     return _singleton
 
 def validate_api_key() -> bool:
-    return bool(getattr(settings, "OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY", ""))
+    return bool(getattr(_s, "OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY", ""))
 
 def get_metrics(svc: OpenAIVisionService | None = None):
     svc = svc or _singleton_service()
