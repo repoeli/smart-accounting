@@ -104,7 +104,20 @@ class OpenAIVisionService:
             self.async_client = None
             logger.warning("Running in test mode - OpenAI client disabled")
         else:
-            self.async_client = AsyncOpenAI(api_key=api_key, http2=True)
+            # Try to initialize with HTTP/2 for better performance, fallback to HTTP/1.1
+            try:
+                self.async_client = AsyncOpenAI(api_key=api_key, http2=True)
+                logger.info("OpenAI client initialized with HTTP/2 support")
+            except TypeError as e:
+                if "http2" in str(e):
+                    # Fallback to HTTP/1.1 if HTTP/2 is not supported
+                    self.async_client = AsyncOpenAI(api_key=api_key)
+                    logger.warning("HTTP/2 not supported, using HTTP/1.1 for OpenAI client")
+                else:
+                    raise e
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {e}")
+                raise e
             
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT
