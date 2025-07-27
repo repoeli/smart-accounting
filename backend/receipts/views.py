@@ -227,7 +227,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             receipt.save()
 
             # Process with Celery background task (ASYNC) or fallback to sync
-            from .services.queue_service import queue_ocr_task
+            from .services.openai_service import queue_ocr_task
             
             # Set initial status to processing
             receipt.ocr_status = 'processing'
@@ -391,14 +391,14 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        from .services.queue_service import queue_reprocess_task
+        from .services.openai_service import queue_ocr_task
         
         # Reset status
         receipt.ocr_status = 'processing'
         receipt.extracted_data = {}
         
         # Try to queue the reprocessing task safely
-        queue_result = queue_reprocess_task(receipt.id)
+        queue_result = queue_ocr_task(receipt.id)
         
         if queue_result["queued"]:
             # Successfully queued (either async or eager)
