@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-openai_service.py - v1.0 (Cloudinary + Costco fix, single-model, BC safe)
+openai_service.py – v1.0 (Cloudinary + Costco fix, single‑model, BC safe)
 =======================================================================
 This version **adds an optional Cloudinary upload step** that:
   • **Resizes** the *original* uploaded receipt to a bounded long-edge (default 1280px)
@@ -509,6 +509,30 @@ def _process_receipt_for_id_local(receipt_id: int) -> None:
         if hasattr(r, "ocr_status"):
             setattr(r, "ocr_status", "completed")
             changed = True
+        
+        # Extract and save Cloudinary metadata if available
+        cloudinary_data = result.get("processing_metadata", {}).get("cloudinary", {})
+        if cloudinary_data:
+            logger.info(f"Saving Cloudinary metadata for receipt {receipt_id}: {cloudinary_data}")
+            if hasattr(r, "cloudinary_public_id") and cloudinary_data.get("public_id"):
+                setattr(r, "cloudinary_public_id", cloudinary_data["public_id"])
+                changed = True
+            if hasattr(r, "cloudinary_url") and cloudinary_data.get("secure_url"):
+                setattr(r, "cloudinary_url", cloudinary_data["secure_url"])
+                changed = True
+            if hasattr(r, "cloudinary_display_url") and cloudinary_data.get("secure_url"):
+                setattr(r, "cloudinary_display_url", cloudinary_data["secure_url"])
+                changed = True
+            if hasattr(r, "image_width") and cloudinary_data.get("width"):
+                setattr(r, "image_width", cloudinary_data["width"])
+                changed = True
+            if hasattr(r, "image_height") and cloudinary_data.get("height"):
+                setattr(r, "image_height", cloudinary_data["height"])
+                changed = True
+            if hasattr(r, "file_size_bytes") and cloudinary_data.get("bytes"):
+                setattr(r, "file_size_bytes", cloudinary_data["bytes"])
+                changed = True
+        
         if changed:
             try:
                 r.save()
@@ -536,15 +560,11 @@ def safe_enqueue(task, *args, **kwargs) -> dict:
     """
     import os, logging
     logger = logging.getLogger(__name__)
-    
-    logger.info(f"safe_enqueue called with OCR_LOCAL_ASYNC={OCR_LOCAL_ASYNC}, DISABLE_CELERY={os.getenv('DISABLE_CELERY', '0')}")
 
     use_local = OCR_LOCAL_ASYNC or os.getenv("DISABLE_CELERY", "0") == "1"
     if use_local:
         try:
-            logger.info(f"Submitting task {task} to local executor with args {args}")
             _local_bg_executor.submit(task, *args, **kwargs)
-            logger.info("Task submitted successfully to local executor")
             return {"queued": True, "eager": False, "deferred": False}
         except Exception as exc:
             logger.warning("safe_enqueue local submit failed: %s", exc)
@@ -556,9 +576,7 @@ def safe_enqueue(task, *args, **kwargs) -> dict:
         CeleryError = Exception  # type: ignore
 
     try:
-        logger.info(f"Attempting to queue task {task} via Celery")
         task.delay(*args, **kwargs)
-        logger.info("Task queued successfully via Celery")
         return {"queued": True, "eager": False, "deferred": False}
     except CeleryError as exc:
         logger.warning("safe_enqueue deferred due to broker error: %s", exc)
@@ -573,14 +591,10 @@ def queue_ocr_task(receipt_id: int) -> dict:
     """
     import logging, os
     logger = logging.getLogger(__name__)
-    
-    logger.info(f"queue_ocr_task called for receipt {receipt_id}")
-    logger.info(f"Environment: OCR_LOCAL_ASYNC={OCR_LOCAL_ASYNC}, DISABLE_CELERY={os.getenv('DISABLE_CELERY', '0')}")
 
     # Local path: submit our internal runner
     if OCR_LOCAL_ASYNC or os.getenv("DISABLE_CELERY", "0") == "1":
         try:
-            logger.info(f"Using local background processing for receipt {receipt_id}")
             _local_bg_executor.submit(_process_receipt_for_id_local, receipt_id)
             logger.info("Local OCR queued for receipt %s", receipt_id)
             return {"queued": True, "eager": False, "deferred": False}
@@ -591,20 +605,16 @@ def queue_ocr_task(receipt_id: int) -> dict:
     # Celery path if available
     try:
         from receipts.tasks import process_receipt_task  # type: ignore
-        logger.info("Celery task found, attempting to use Celery queue")
     except Exception as exc:
         logger.warning("Celery task missing; falling back to local OCR: %s", exc)
         try:
-            logger.info(f"Falling back to local processing for receipt {receipt_id}")
             _local_bg_executor.submit(_process_receipt_for_id_local, receipt_id)
             return {"queued": True, "eager": False, "deferred": False}
         except Exception as inner:
             logger.error("Local OCR submit failed: %s", inner)
             return {"queued": False, "eager": False, "deferred": True}
 
-    result = safe_enqueue(process_receipt_task, receipt_id)
-    logger.info(f"queue_ocr_task result: {result}")
-    return result
+    return safe_enqueue(process_receipt_task, receipt_id)
 
 # ---------------------------------------------------------------------------
 # Global helpers (unchanged signatures) -------------------------------------
