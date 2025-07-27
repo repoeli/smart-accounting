@@ -1,9 +1,10 @@
 """
 Celery Configuration for Heroku Deployment
-Optimized for receipt OCR background processing
+Optimized for receipt OCR background processing with web dyno safety
 """
 import os
 import sys
+import ssl
 from celery import Celery
 
 # Add the project directory to Python path
@@ -21,37 +22,48 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
-# Heroku Redis Configuration with enhanced SSL support
-import ssl
+# Heroku-safe Celery configuration with dyno role detection
+# Prefer TLS URL from Heroku Redis
+_broker = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_TLS_URL") or os.getenv("REDIS_URL", "")
+if _broker.startswith("redis://"):      # force TLS on Heroku
+    _broker = _broker.replace("redis://", "rediss://", 1)
 
-# Get Redis URLs with TLS preference for Heroku
-broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_TLS_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0")))
+# Detect dyno role: web.* should not connect to result backend
+_dyno = os.getenv("DYNO", "")
+_is_web_dyno = _dyno.startswith("web.")
 
-# Force rediss:// for TLS on Heroku
-if broker_url.startswith("redis://"):
-    broker_url = broker_url.replace("redis://", "rediss://", 1)
+# Allow explicit override via env (1=disable result backend everywhere)
+_disable_result = os.getenv("DISABLE_CELERY_RESULT", "0") == "1"
 
-result_backend = os.getenv("CELERY_RESULT_BACKEND", broker_url)
+broker_url = _broker
 
+# Result backend logic:
+#  - On worker/beat dynos: use Redis result backend (default).
+#  - On web dynos or when disabled: no result backend and ignore results.
+if _is_web_dyno or _disable_result:
+    result_backend = None
+    task_ignore_result = True
+    result_extended = False
+else:
+    result_backend = os.getenv("CELERY_RESULT_BACKEND", _broker)
+    task_ignore_result = False
+    result_extended = False
+
+# TLS for broker/result (Heroku Redis supports CA‑signed certs; you can set 'required')
 _use_ssl = os.getenv("CELERY_BROKER_USE_SSL", "1") == "1"
-_cert_reqs = os.getenv("CELERY_SSL_CERT_REQS", "none")  # 'required' if you upload certs
+_cert_reqs = os.getenv("CELERY_SSL_CERT_REQS", "none")   # 'required' if you want strict verify
+_ssl_cfg = {"ssl_cert_reqs": _cert_reqs} if _use_ssl else None
 
-# Configure SSL with more robust settings
-broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE} if _use_ssl else None
-redis_backend_use_ssl = broker_use_ssl
+broker_use_ssl = _ssl_cfg
+redis_backend_use_ssl = _ssl_cfg
 
-# Enhanced network resilience on Heroku
+# Network resilience on Heroku
 broker_transport_options = {
     "visibility_timeout": 60 * 30,
     "socket_keepalive": True,
     "socket_timeout": 5,
     "retry_on_timeout": True,
     "max_connections": 10,
-    "connection_pool_kwargs": {
-        "retry_on_timeout": True,
-        "socket_connect_timeout": 10,
-        "socket_timeout": 10,
-    },
 }
 result_backend_transport_options = {"retry_on_timeout": True}
 
@@ -59,6 +71,8 @@ app.conf.update(
     # Redis URL from Heroku environment with SSL support
     broker_url=broker_url,
     result_backend=result_backend,
+    task_ignore_result=task_ignore_result,
+    result_extended=result_extended,
     broker_use_ssl=broker_use_ssl,
     broker_transport_options=broker_transport_options,
     redis_backend_use_ssl=redis_backend_use_ssl,
@@ -71,10 +85,11 @@ app.conf.update(
     timezone='UTC',
     enable_utc=True,
     
-    # Concurrency and Performance
-    worker_prefetch_multiplier=1,  # One task per worker at a time
-    task_acks_late=True,          # Acknowledge after task completion
-    worker_max_tasks_per_child=100, # Restart workers after 100 tasks
+    # Worker behaviour
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
+    task_time_limit=120,
+    task_soft_time_limit=90,
     
     # Task routing for OCR operations
     task_routes={
@@ -83,15 +98,11 @@ app.conf.update(
         'receipts.tasks.cleanup_temp_files': {'queue': 'maintenance'},
     },
     
-    # Task time limits (important for Heroku dyno cycling)
-    task_soft_time_limit=600,  # 10 minutes soft limit
-    task_time_limit=720,       # 12 minutes hard limit
-    
     # Retry configuration
     task_default_retry_delay=60,
     task_max_retries=3,
     
-    # Result expiration
+    # Result expiration (only used by workers when result_backend is enabled)
     result_expires=3600,  # 1 hour
     
     # Enhanced Heroku reliability settings
@@ -99,6 +110,8 @@ app.conf.update(
     task_eager_propagates=False,
     worker_send_task_events=True,
     task_send_sent_event=True,
+    
+    # Avoid crashing at boot if broker is briefly unavailable
     broker_connection_retry_on_startup=True,
     task_reject_on_worker_lost=True,
 )

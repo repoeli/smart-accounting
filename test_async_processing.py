@@ -7,13 +7,65 @@ import time
 import json
 
 # Configuration
-API_BASE_URL = "https://smart-backend-56247d256139.herokuapp.com/api"
+# Configuration
+API_BASE_URL = "https://smart-backend-56247d256139.herokuapp.com/api/v1"
 RECEIPT_IMAGE_PATH = "errorlogs/receipt-starbucks-beverage.jpeg"
+
+def create_test_user_and_login():
+    """Login with existing user credentials"""
+    try:
+        # Use existing user credentials
+        login_data = {
+            'email': 'ineliyow@gmail.com',
+            'password': 'P@$$w0rd123'
+        }
+        
+        print("   Logging in with existing user...")
+        login_response = requests.post(
+            f"{API_BASE_URL}/accounts/token/",
+            json=login_data,
+            timeout=10
+        )
+        
+        if login_response.status_code == 200:
+            token_data = login_response.json()
+            # Token is nested in 'tokens' object
+            tokens = token_data.get('tokens', {})
+            access_token = tokens.get('access')
+            if access_token:
+                print(f"   ✅ Login successful! Got token.")
+                return access_token
+            else:
+                print(f"   ❌ Login response missing access token: {token_data}")
+                return None
+        else:
+            print(f"   ❌ Login failed: {login_response.status_code}")
+            print(f"   Response: {login_response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"   ❌ Auth error: {e}")
+        return None
 
 def test_async_receipt_processing():
     """Test the new async receipt processing workflow"""
     print("🧪 Testing Async Receipt Processing")
     print("=" * 50)
+    
+    # Step 0: Get authentication token
+    print("🔐 Step 0: Authenticating...")
+    auth_token = create_test_user_and_login()
+    
+    if not auth_token:
+        print("❌ Authentication failed. Cannot test async processing.")
+        return False
+    
+    print("✅ Authentication successful!")
+    
+    # Prepare headers with authentication
+    headers = {
+        'Authorization': f'Bearer {auth_token}'
+    }
     
     # Step 1: Upload receipt (should return immediately with processing status)
     print("📤 Step 1: Uploading receipt...")
@@ -21,7 +73,12 @@ def test_async_receipt_processing():
     try:
         with open(RECEIPT_IMAGE_PATH, 'rb') as f:
             files = {'image': ('receipt.jpeg', f, 'image/jpeg')}
-            response = requests.post(f"{API_BASE_URL}/receipts/", files=files, timeout=30)
+            response = requests.post(
+                f"{API_BASE_URL}/receipts/", 
+                files=files, 
+                headers=headers,
+                timeout=30
+            )
         
         if response.status_code not in [200, 201]:
             print(f"❌ Upload failed: {response.status_code}")
@@ -53,6 +110,7 @@ def test_async_receipt_processing():
             try:
                 status_response = requests.get(
                     f"{API_BASE_URL}/receipts/{receipt_id}/processing_status/",
+                    headers=headers,
                     timeout=10
                 )
                 
@@ -68,6 +126,7 @@ def test_async_receipt_processing():
                         # Get final receipt data
                         final_response = requests.get(
                             f"{API_BASE_URL}/receipts/{receipt_id}/",
+                            headers=headers,
                             timeout=10
                         )
                         

@@ -87,7 +87,7 @@ class OpenAIVisionService:
     def __init__(self):
         if not settings.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not configured")
-        self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY, http2=True)
+        self.async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT
         self.metrics: Dict[str, Union[int, Decimal]] = {

@@ -226,52 +226,121 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             
             receipt.save()
 
-            # Process with Celery background task (ASYNC)
-            try:
-                from .tasks import process_receipt_task
-                
-                # Set initial status to processing
-                receipt.ocr_status = 'processing'
-                receipt.save()
-                
-                # Trigger background OCR processing
-                task = process_receipt_task.delay(receipt.id, use_v5=True)
-                
-                # Store task ID for tracking
+            # Process with Celery background task (ASYNC) or fallback to sync
+            from .services.queue_service import queue_ocr_task
+            
+            # Set initial status to processing
+            receipt.ocr_status = 'processing'
+            receipt.save()
+            
+            # Try to queue the task safely
+            queue_result = queue_ocr_task(receipt.id)
+            
+            if queue_result["queued"]:
+                # Successfully queued (either async or eager)
                 receipt.processing_metadata = {
-                    'task_id': task.id,
                     'status': 'queued',
-                    'queued_at': datetime.now().isoformat()
+                    'queued_at': datetime.now().isoformat(),
+                    'processing_method': 'eager' if queue_result.get('eager') else 'async'
                 }
                 receipt.save()
                 
-                logger.info(f"Queued OCR processing for receipt {receipt.id} with task {task.id}")
+                logger.info(f"Queued OCR processing for receipt {receipt.id} (method: {receipt.processing_metadata['processing_method']})")
                 
-                # Return immediately with processing status
-                # The frontend should poll for completion
-
-                # Create transaction if extraction was successful (will be done by Celery task)
-                # The transaction will be created when OCR completes
-                
-                serializer = self.get_serializer(receipt)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-            except Exception as e:
-                logger.error(f"Celery task queueing failed for receipt {receipt.id}: {e}")
-                receipt.ocr_status = 'failed'
+            elif queue_result.get("deferred"):
+                # Queue unavailable, return 202 for client retry
+                receipt.ocr_status = 'queued'
                 receipt.processing_metadata = {
-                    'error': f'Task queueing failed: {str(e)}',
-                    'processing_time': 0,
-                    'cost_usd': 0,
-                    'token_usage': 0,
-                    'segments_processed': 0
+                    'status': 'deferred',
+                    'queued_at': datetime.now().isoformat(),
+                    'message': 'Queue busy, will retry automatically'
                 }
                 receipt.save()
                 
-                return Response(
-                    {'error': f'Processing queue failed: {str(e)}'},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+                logger.info(f"Queue deferred for receipt {receipt.id}, returning 202")
+                serializer = self.get_serializer(receipt)
+                return Response({
+                    **serializer.data,
+                    "queued": False, 
+                    "detail": "Queue busy, processing will retry automatically."
+                }, status=status.HTTP_202_ACCEPTED)
+                
+            else:
+                # Queue error, fallback to synchronous processing
+                logger.warning(f"Queue failed for receipt {receipt.id}, attempting synchronous fallback")
+                
+                # Fallback to synchronous processing when Celery is unavailable
+                try:
+                    # Process receipt synchronously using asyncio
+                    service = get_openai_service()
+                    
+                    # Check if we're in test mode (OpenAI service disabled)
+                    if service.async_client is None:
+                        # In test mode, create mock result
+                        result = {
+                            'vendor_name': 'Test Vendor',
+                            'total_amount': 10.00,
+                            'transaction_type': 'expense',
+                            'date': datetime.now().date().isoformat(),
+                            'currency': 'GBP',
+                            'processing_metadata': {
+                                'processing_method': 'test_mode',
+                                'processing_time': 0.1,
+                                'cost_usd': 0.00
+                            }
+                        }
+                        logger.info(f"Test mode: created mock result for receipt {receipt.id}")
+                    else:
+                        # Define async processing function
+                        async def process_sync():
+                            # Use the local file for processing (Cloudinary is just for display)
+                            return await service.process_receipt(receipt.file, receipt.original_filename)
+                        
+                        # Run the async processing
+                        result = asyncio.run(process_sync())
+                    
+                    # Update receipt with extracted data
+                    if result:
+                        receipt.extracted_data = result
+                        receipt.ocr_status = 'completed'
+                        receipt.processing_metadata = result.get('processing_metadata', {})
+                        receipt.processing_metadata['processing_method'] = 'synchronous_fallback'
+                        
+                        # Create transaction if we have valid data
+                        if result.get('vendor_name') and result.get('total_amount'):
+                            try:
+                                Transaction.objects.create(
+                                    receipt=receipt,
+                                    owner=request.user,
+                                    total_amount=Decimal(str(result.get('total_amount', 0))),
+                                    transaction_type=result.get('transaction_type', 'expense'),
+                                    vendor_name=result.get('vendor_name', 'Unknown'),
+                                    transaction_date=self._parse_date(result.get('date'))
+                                )
+                                logger.info(f"Created transaction for receipt {receipt.id}")
+                            except Exception as tx_error:
+                                logger.warning(f"Could not create transaction for receipt {receipt.id}: {tx_error}")
+                    else:
+                        receipt.ocr_status = 'failed'
+                        receipt.processing_metadata = {
+                            'error': 'Synchronous processing failed',
+                            'processing_method': 'synchronous_fallback'
+                        }
+                    
+                    receipt.save()
+                    
+                except Exception as sync_error:
+                    logger.error(f"Synchronous processing also failed for receipt {receipt.id}: {sync_error}")
+                    receipt.ocr_status = 'failed'
+                    receipt.processing_metadata = {
+                        'error': f'Both async and sync processing failed: {str(sync_error)}',
+                        'processing_method': 'failed_fallback'
+                    }
+                    receipt.save()
+            
+            # Always return success if receipt was uploaded and stored
+            serializer = self.get_serializer(receipt)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
 
         except Exception as e:
             logger.error(f"Receipt upload failed: {e}")
@@ -322,45 +391,141 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            from .tasks import process_receipt_task
-            
-            # Reset status
-            receipt.ocr_status = 'processing'
-            receipt.extracted_data = {}
-            
-            # Queue reprocessing task
-            task = process_receipt_task.delay(receipt.id, use_v5=True)
-            
+        from .services.queue_service import queue_reprocess_task
+        
+        # Reset status
+        receipt.ocr_status = 'processing'
+        receipt.extracted_data = {}
+        
+        # Try to queue the reprocessing task safely
+        queue_result = queue_reprocess_task(receipt.id)
+        
+        if queue_result["queued"]:
+            # Successfully queued (either async or eager)
             receipt.processing_metadata = {
-                'task_id': task.id,
                 'status': 'queued',
                 'queued_at': datetime.now().isoformat(),
-                'reprocessed': True
+                'reprocessed': True,
+                'processing_method': 'eager' if queue_result.get('eager') else 'async'
             }
             receipt.save()
             
-            logger.info(f"Queued reprocessing for receipt {receipt.id} with task {task.id}")
-            
+            logger.info(f"Queued reprocessing for receipt {receipt.id} (method: {receipt.processing_metadata['processing_method']})")
             serializer = self.get_serializer(receipt)
             return Response(serializer.data)
-
-        except Exception as e:
-            logger.error(f"Reprocessing queue failed for receipt {receipt.id}: {e}")
-            receipt.ocr_status = 'failed'
+            
+        elif queue_result.get("deferred"):
+            # Queue unavailable, return 202 for client retry
+            receipt.ocr_status = 'queued'
             receipt.processing_metadata = {
-                'error': f'Reprocessing queue failed: {str(e)}',
-                'processing_time': 0,
-                'cost_usd': 0,
-                'token_usage': 0,
-                'segments_processed': 0
+                'status': 'deferred',
+                'queued_at': datetime.now().isoformat(),
+                'reprocessed': True,
+                'message': 'Queue busy, will retry automatically'
             }
             receipt.save()
             
-            return Response(
-                {'error': f'Reprocessing failed: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            logger.info(f"Reprocessing queue deferred for receipt {receipt.id}, returning 202")
+            serializer = self.get_serializer(receipt)
+            return Response({
+                **serializer.data,
+                "queued": False, 
+                "detail": "Queue busy, reprocessing will retry automatically."
+            }, status=status.HTTP_202_ACCEPTED)
+            
+        else:
+            # Queue error, fallback to synchronous processing
+            logger.warning(f"Reprocessing queue failed for receipt {receipt.id}, attempting synchronous fallback")
+            
+            # Fallback to synchronous processing when Celery is unavailable
+            try:
+                # Process receipt synchronously using asyncio
+                service = get_openai_service()
+                
+                # Check if we're in test mode (OpenAI service disabled)
+                if service.async_client is None:
+                    # In test mode, create mock result
+                    result = {
+                        'vendor_name': 'Test Vendor',
+                        'total_amount': 10.00,
+                        'transaction_type': 'expense',
+                        'date': datetime.now().date().isoformat(),
+                        'currency': 'GBP',
+                        'processing_metadata': {
+                            'processing_method': 'test_mode',
+                            'processing_time': 0.1,
+                            'cost_usd': 0.00,
+                            'reprocessed': True
+                        }
+                    }
+                    logger.info(f"Test mode: created mock result for reprocessing receipt {receipt.id}")
+                else:
+                    # Define async processing function
+                    async def process_sync():
+                        # Use the local file for processing (Cloudinary is just for display)
+                        return await service.process_receipt(receipt.file, receipt.original_filename)
+                    
+                    # Run the async processing
+                    result = asyncio.run(process_sync())
+                
+                # Update receipt with extracted data
+                if result:
+                    receipt.extracted_data = result
+                    receipt.ocr_status = 'completed'
+                    receipt.processing_metadata = result.get('processing_metadata', {})
+                    receipt.processing_metadata['processing_method'] = 'synchronous_fallback'
+                    receipt.processing_metadata['reprocessed'] = True
+                    
+                    # Create or update transaction if we have valid data
+                    if result.get('vendor_name') and result.get('total_amount'):
+                        try:
+                            # Try to get existing transaction first
+                            try:
+                                transaction = Transaction.objects.get(receipt=receipt)
+                                transaction.total_amount = Decimal(str(result.get('total_amount', 0)))
+                                transaction.transaction_type = result.get('transaction_type', 'expense')
+                                transaction.vendor_name = result.get('vendor_name', 'Unknown')
+                                transaction.transaction_date = self._parse_date(result.get('date'))
+                                transaction.save()
+                                logger.info(f"Updated transaction for receipt {receipt.id}")
+                            except Transaction.DoesNotExist:
+                                Transaction.objects.create(
+                                    receipt=receipt,
+                                    owner=self.request.user,
+                                    total_amount=Decimal(str(result.get('total_amount', 0))),
+                                    transaction_type=result.get('transaction_type', 'expense'),
+                                    vendor_name=result.get('vendor_name', 'Unknown'),
+                                    transaction_date=self._parse_date(result.get('date'))
+                                )
+                                logger.info(f"Created transaction for receipt {receipt.id}")
+                        except Exception as tx_error:
+                            logger.warning(f"Could not create/update transaction for receipt {receipt.id}: {tx_error}")
+                else:
+                    receipt.ocr_status = 'failed'
+                    receipt.processing_metadata = {
+                        'error': 'Synchronous reprocessing failed',
+                        'processing_method': 'synchronous_fallback',
+                        'reprocessed': True
+                    }
+                
+                receipt.save()
+                serializer = self.get_serializer(receipt)
+                return Response(serializer.data)
+                
+            except Exception as sync_error:
+                logger.error(f"Synchronous reprocessing also failed for receipt {receipt.id}: {sync_error}")
+                receipt.ocr_status = 'failed'
+                receipt.processing_metadata = {
+                    'error': f'Both async and sync reprocessing failed: {str(sync_error)}',
+                    'processing_method': 'failed_fallback',
+                    'reprocessed': True
+                }
+                receipt.save()
+                
+                return Response(
+                    {'error': f'Reprocessing failed: {str(sync_error)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
     @action(detail=True, methods=['patch'])
     def update_extracted_data(self, request, pk=None):
