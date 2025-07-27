@@ -480,10 +480,7 @@ if 'DYNO' in os.environ:
     # Heroku Postgres optimization
     DATABASES['default']['CONN_MAX_AGE'] = 600
     DATABASES['default']['OPTIONS'] = {
-        'MAX_CONNS': 20,
-        'OPTIONS': {
-            'server_side_binding': True,
-        }
+        'sslmode': 'require',
     }
 else:
     HEROKU_DEPLOYMENT = False
