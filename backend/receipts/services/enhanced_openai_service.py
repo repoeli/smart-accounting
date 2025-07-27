@@ -418,11 +418,18 @@ def queue_ocr_task(receipt_id: int) -> dict:
                 result = asyncio.run(service.process_receipt_focused(receipt.file, receipt.original_filename))
                 
                 # Update receipt with results
-                receipt.vendor_name = result.get('vendor_name', 'Unknown')
-                receipt.total_amount = result.get('total_amount', 0)
-                receipt.transaction_date = result.get('transaction_date')
-                receipt.tax_amount = result.get('tax_amount', 0)
-                receipt.processing_status = 'completed'
+                # Update receipt with results - save to extracted_data, not properties
+                receipt.extracted_data = {
+                    'vendor': result.get('vendor_name', 'Unknown'),
+                    'total': result.get('total_amount', 0),
+                    'date': result.get('transaction_date'),
+                    'tax': result.get('tax_amount'),
+                    'currency': result.get('currency', 'GBP'),
+                    'type': result.get('transaction_type', 'expense'),
+                    'line_items': result.get('line_items', [])
+                }
+                receipt.processing_metadata = result.get('processing_metadata', {})
+                receipt.ocr_status = 'completed'
                 receipt.save()
                 
                 logger.info(f"Background OCR completed for receipt {receipt_id}")
