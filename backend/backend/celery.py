@@ -23,7 +23,6 @@ app.autodiscover_tasks()
 
 # Heroku Redis Configuration with enhanced SSL support
 import ssl
-from kombu.utils.url import safe_quote
 
 # Get Redis URLs with TLS preference for Heroku
 broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_TLS_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0")))
