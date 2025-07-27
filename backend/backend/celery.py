@@ -25,20 +25,25 @@ broker_use_ssl = None
 broker_transport_options = {}
 
 if redis_url.startswith('rediss://'):
-    # Heroku Redis uses SSL, configure it properly
+    # Heroku Redis uses SSL, but has self-signed certificates
+    # Configure to skip certificate verification
     import ssl
     broker_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_REQUIRED,
+        'ssl_cert_reqs': ssl.CERT_NONE,  # Don't verify certificates
         'ssl_ca_certs': None,
         'ssl_certfile': None,
         'ssl_keyfile': None,
+        'ssl_check_hostname': False,  # Don't check hostname
     }
     
-    # Add SSL parameters to Redis URL
-    if '?' not in redis_url:
-        redis_url += '?ssl_cert_reqs=required'
-    else:
-        redis_url += '&ssl_cert_reqs=required'
+    # Also configure transport options
+    broker_transport_options = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+        'ssl_ca_certs': None,
+        'ssl_certfile': None,
+        'ssl_keyfile': None,
+        'ssl_check_hostname': False,
+    }
 
 app.conf.update(
     # Redis URL from Heroku environment with SSL support
@@ -47,6 +52,7 @@ app.conf.update(
     broker_use_ssl=broker_use_ssl,
     broker_transport_options=broker_transport_options,
     redis_backend_use_ssl=broker_use_ssl,
+    result_backend_transport_options=broker_transport_options,
     
     # Performance Optimizations
     task_serializer='json',
