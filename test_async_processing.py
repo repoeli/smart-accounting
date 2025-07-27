@@ -7,7 +7,7 @@ import time
 import json
 
 # Configuration
-API_BASE_URL = "https://smart-backend-8c9b4bdab3b4.herokuapp.com/api"
+API_BASE_URL = "https://smart-backend-56247d256139.herokuapp.com/api"
 RECEIPT_IMAGE_PATH = "errorlogs/receipt-starbucks-beverage.jpeg"
 
 def test_async_receipt_processing():

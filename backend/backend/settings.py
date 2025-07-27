@@ -361,16 +361,28 @@ CELERY_RESULT_BACKEND = REDIS_URL
 # SSL Configuration for Heroku Redis (rediss://)
 if REDIS_URL.startswith('rediss://'):
     CELERY_BROKER_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_REQUIRED,
+        'ssl_cert_reqs': ssl.CERT_NONE,  # Skip certificate verification
         'ssl_ca_certs': None,
         'ssl_certfile': None,
         'ssl_keyfile': None,
+        'ssl_check_hostname': False,  # Don't verify hostname
     }
     CELERY_REDIS_BACKEND_USE_SSL = {
-        'ssl_cert_reqs': ssl.CERT_REQUIRED,
+        'ssl_cert_reqs': ssl.CERT_NONE,  # Skip certificate verification
         'ssl_ca_certs': None,
         'ssl_certfile': None,
         'ssl_keyfile': None,
+        'ssl_check_hostname': False,  # Don't verify hostname
+    }
+    
+    # Additional transport options for SSL
+    CELERY_BROKER_TRANSPORT_OPTIONS = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+        'ssl_check_hostname': False,
+    }
+    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
+        'ssl_cert_reqs': ssl.CERT_NONE,
+        'ssl_check_hostname': False,
     }
 
 CELERY_ACCEPT_CONTENT = ['json']
