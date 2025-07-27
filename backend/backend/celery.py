@@ -17,42 +17,49 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
-# Heroku Redis Configuration with SSL support
-redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+# Heroku Redis Configuration with enhanced SSL support
+import ssl
+from kombu.utils.url import safe_quote
 
-# Configure SSL for Heroku Redis (rediss://)
-broker_use_ssl = None
-broker_transport_options = {}
+# Get Redis URLs with TLS preference for Heroku
+broker_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_TLS_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0")))
 
-if redis_url.startswith('rediss://'):
-    # Heroku Redis uses SSL, but has self-signed certificates
-    # Configure to skip certificate verification
-    import ssl
-    broker_use_ssl = {
-        'ssl_cert_reqs': ssl.CERT_NONE,  # Don't verify certificates
-        'ssl_ca_certs': None,
-        'ssl_certfile': None,
-        'ssl_keyfile': None,
-        'ssl_check_hostname': False,  # Don't check hostname
-    }
-    
-    # Also configure transport options
-    broker_transport_options = {
-        'ssl_cert_reqs': ssl.CERT_NONE,
-        'ssl_ca_certs': None,
-        'ssl_certfile': None,
-        'ssl_keyfile': None,
-        'ssl_check_hostname': False,
-    }
+# Force rediss:// for TLS on Heroku
+if broker_url.startswith("redis://"):
+    broker_url = broker_url.replace("redis://", "rediss://", 1)
+
+result_backend = os.getenv("CELERY_RESULT_BACKEND", broker_url)
+
+_use_ssl = os.getenv("CELERY_BROKER_USE_SSL", "1") == "1"
+_cert_reqs = os.getenv("CELERY_SSL_CERT_REQS", "none")  # 'required' if you upload certs
+
+# Configure SSL with more robust settings
+broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_NONE} if _use_ssl else None
+redis_backend_use_ssl = broker_use_ssl
+
+# Enhanced network resilience on Heroku
+broker_transport_options = {
+    "visibility_timeout": 60 * 30,
+    "socket_keepalive": True,
+    "socket_timeout": 5,
+    "retry_on_timeout": True,
+    "max_connections": 10,
+    "connection_pool_kwargs": {
+        "retry_on_timeout": True,
+        "socket_connect_timeout": 10,
+        "socket_timeout": 10,
+    },
+}
+result_backend_transport_options = {"retry_on_timeout": True}
 
 app.conf.update(
     # Redis URL from Heroku environment with SSL support
-    broker_url=redis_url,
-    result_backend=redis_url,
+    broker_url=broker_url,
+    result_backend=result_backend,
     broker_use_ssl=broker_use_ssl,
     broker_transport_options=broker_transport_options,
-    redis_backend_use_ssl=broker_use_ssl,
-    result_backend_transport_options=broker_transport_options,
+    redis_backend_use_ssl=redis_backend_use_ssl,
+    result_backend_transport_options=result_backend_transport_options,
     
     # Performance Optimizations
     task_serializer='json',
@@ -83,4 +90,12 @@ app.conf.update(
     
     # Result expiration
     result_expires=3600,  # 1 hour
+    
+    # Enhanced Heroku reliability settings
+    task_always_eager=False,
+    task_eager_propagates=False,
+    worker_send_task_events=True,
+    task_send_sent_event=True,
+    broker_connection_retry_on_startup=True,
+    task_reject_on_worker_lost=True,
 )

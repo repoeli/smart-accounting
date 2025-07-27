@@ -302,7 +302,7 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@smartaccounting.com')
 
 # AI Vision API settings
-OPENAI_API_KEY = os.environ.get('OPEN_AI_API_KEY', '')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 OPENAI_VISION_MODEL = os.environ.get('OPENAI_VISION_MODEL', 'gpt-4o')  # GPT-4o is the top vision API
 XAI_API_KEY = os.environ.get('XAI_API_KEY', '')
 VISION_API_PRIMARY = os.environ.get('VISION_API_PRIMARY', 'openai')
@@ -375,14 +375,31 @@ if REDIS_URL.startswith('rediss://'):
         'ssl_check_hostname': False,  # Don't verify hostname
     }
     
-    # Additional transport options for SSL
+    # Additional transport options for SSL with connection pooling
     CELERY_BROKER_TRANSPORT_OPTIONS = {
         'ssl_cert_reqs': ssl.CERT_NONE,
         'ssl_check_hostname': False,
+        'connection_pool_kwargs': {
+            'ssl_cert_reqs': ssl.CERT_NONE,
+            'ssl_check_hostname': False,
+            'retry_on_timeout': True,
+            'socket_connect_timeout': 30,
+            'socket_timeout': 30,
+        },
+        'visibility_timeout': 3600,
+        'fanout_prefix': True,
+        'fanout_patterns': True,
     }
     CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {
         'ssl_cert_reqs': ssl.CERT_NONE,
         'ssl_check_hostname': False,
+        'connection_pool_kwargs': {
+            'ssl_cert_reqs': ssl.CERT_NONE,
+            'ssl_check_hostname': False,
+            'retry_on_timeout': True,
+            'socket_connect_timeout': 30,
+            'socket_timeout': 30,
+        },
     }
 
 CELERY_ACCEPT_CONTENT = ['json']
@@ -390,6 +407,14 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_ENABLE_UTC = True
+
+# Connection retry settings for Redis SSL issues
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
+CELERY_REDIS_RETRY_ON_TIMEOUT = True
+CELERY_REDIS_SOCKET_TIMEOUT = 30
+CELERY_REDIS_SOCKET_CONNECT_TIMEOUT = 30
 
 # Performance settings for Celery
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
