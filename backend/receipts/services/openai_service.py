@@ -193,32 +193,16 @@ class OpenAIVisionService:
     def __init__(self):
         # Read key from Django settings or env (Heroku-safe)
         api_key = getattr(settings, 'OPENAI_API_KEY', None) or os.environ.get('OPENAI_API_KEY', '')
-        
         if not api_key:
             raise ValueError("OPENAI_API_KEY is not configured")
-        
-        # Handle test/development environments
-        is_test_env = (
-            api_key.startswith('sk-test-') or 
-            api_key.startswith('test-') or
-            'test' in api_key.lower() or
-            os.environ.get('DJANGO_SETTINGS_MODULE', '').endswith('.testing') or
-            os.environ.get('CI') == 'true'  # GitHub Actions
-        )
-        
-        if is_test_env:
-            # In test environment, create a mock client to prevent API calls
-            self.async_client = None
-            logger.warning("Running in test mode - OpenAI client disabled")
-        else:
-            # Initialize without HTTP/2 for Heroku compatibility
-            try:
-                # Heroku note: some OpenAI SDK builds don't accept `http2` kwarg. Use defaults.
-                self.async_client = AsyncOpenAI(api_key=api_key)
-                logger.info("OpenAI client initialized for Heroku production")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI client: {e}")
-                raise e
+
+        # Initialize without HTTP/2 for Heroku compatibility
+        try:
+            self.async_client = AsyncOpenAI(api_key=api_key)
+            logger.info("OpenAI client initialized for Heroku production")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {e}")
+            raise
             
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=THREADS)
         self.model = FT_MODEL_ID or MODEL_NAME_DEFAULT
@@ -268,7 +252,7 @@ class OpenAIVisionService:
             rsp = await self.async_client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                response_format={"type": "json_object", "require_grounding": True},
+                response_format={"type": "json_object"},
                 max_tokens=MAX_TOKENS_TILE,
                 temperature=0,
                 timeout=OPENAI_TIMEOUT_SECONDS,
@@ -305,14 +289,9 @@ class OpenAIVisionService:
         # Validation & rescue
         try:
             errors: List[str] = []
-            validator = DataValidator()
-            if hasattr(validator, 'validate_and_clean'):
-                cleaned_data = validator.validate_and_clean(merged)
-                merged.update(cleaned_data)
-            else:
-                errors, fixed = validator.validate_and_fix(merged)
-                if fixed:
-                    merged.update(fixed)
+            errors, fixed = DataValidator.validate_and_fix(merged)
+            if fixed:
+                merged.update(fixed)
         except Exception as e:  # validator optional
             logger.warning("Validator error: %s", e)
             errors = ["validator_exception"]
@@ -518,7 +497,7 @@ def _singleton_service() -> OpenAIVisionService:
     return _singleton
 
 def validate_api_key() -> bool:
-    return bool(_s.OPENAI_API_KEY)
+    return bool(getattr(settings, "OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY", ""))
 
 def get_metrics(svc: OpenAIVisionService | None = None):
     svc = svc or _singleton_service()
