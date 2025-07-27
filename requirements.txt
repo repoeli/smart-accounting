@@ -1,0 +1,43 @@
+# Production Requirements for Smart Accounting
+# Cleaned for Heroku deployment - no Celery/Redis dependencies
+
+# Core Django
+Django==4.2.16
+djangorestframework==3.16.0
+psycopg2-binary==2.9.10
+django-cors-headers==4.7.0
+gunicorn==23.0.0
+whitenoise==6.7.0
+python-dotenv==1.1.1
+dj-database-url==3.0.1
+
+# Authentication
+PyJWT==2.9.0
+djangorestframework_simplejwt==5.4.0
+
+# API Documentation
+drf-yasg==1.21.10
+
+# OpenAI and HTTP client with HTTP/2 support
+httpx==0.25.2
+httpx[http2]==0.25.2
+openai==1.3.0
+h2>=4.0.0
+h11==0.14.0
+anyio==3.7.1
+sniffio==1.3.0
+
+# Image processing
+pillow==11.3.0
+cloudinary==1.36.0
+
+# HTTP requests
+requests==2.32.4
+
+# Payment processing
+stripe==12.3.0
+
+# Utilities
+sqlparse==0.5.3
+pytz==2025.2
+tzdata==2025.2
