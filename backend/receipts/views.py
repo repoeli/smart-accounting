@@ -233,19 +233,24 @@ class ReceiptViewSet(viewsets.ModelViewSet):
             receipt.ocr_status = 'processing'
             receipt.save()
             
+            logger.info(f"About to queue OCR task for receipt {receipt.id}")
+            
             # Try to queue the task safely
             queue_result = queue_ocr_task(receipt.id)
+            
+            logger.info(f"Queue result for receipt {receipt.id}: {queue_result}")
             
             if queue_result["queued"]:
                 # Successfully queued (either async or eager)
                 receipt.processing_metadata = {
                     'status': 'queued',
                     'queued_at': datetime.now().isoformat(),
-                    'processing_method': 'eager' if queue_result.get('eager') else 'async'
+                    'processing_method': 'eager' if queue_result.get('eager') else 'async',
+                    'task_id': queue_result.get('task_id')
                 }
                 receipt.save()
                 
-                logger.info(f"Queued OCR processing for receipt {receipt.id} (method: {receipt.processing_metadata['processing_method']})")
+                logger.info(f"✅ Queued OCR processing for receipt {receipt.id} (method: {receipt.processing_metadata['processing_method']})")
                 
             elif queue_result.get("deferred"):
                 # Queue unavailable, return 202 for client retry
@@ -267,7 +272,8 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                 
             else:
                 # Queue error, fallback to synchronous processing
-                logger.warning(f"Queue failed for receipt {receipt.id}, attempting synchronous fallback")
+                logger.error(f"❌ Queue failed for receipt {receipt.id}: {queue_result.get('error', 'Unknown error')}")
+                logger.warning(f"Attempting synchronous fallback for receipt {receipt.id}")
                 
                 # Fallback to synchronous processing when Celery is unavailable
                 try:

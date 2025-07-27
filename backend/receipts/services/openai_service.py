@@ -437,36 +437,60 @@ def _fuse_split_lines(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # Safe enqueue helpers (Celery queue resilience for web dynos)
 # ---------------------------------------------------------------------------
 
-def safe_enqueue(task, *args, **kwargs) -> dict:
-    """Enqueue a Celery task safely.
+def safe_enqueue(task_func, *args, **kwargs) -> dict:
+    """Safe wrapper for Celery task.apply_async() with comprehensive fallback.
 
-    - Uses `.delay()` normally.
-    - If the broker is unavailable and `CELERY_TASK_ALWAYS_EAGER=1`, falls back to `task.apply(...)`.
-    - Otherwise returns a deferred signal so the caller can respond 202 without 500s.
-
-    Returns a dict: {"queued": bool, "eager": bool, "deferred": bool}.
+    Returns dict with keys:
+      - "queued": bool (True if submitted to broker or ran eagerly)
+      - "eager": bool (True if ran synchronously)
+      - "deferred": bool (True if broker unavailable, should retry later)
     """
-    import os, logging
+    import logging
     logger = logging.getLogger(__name__)
+    
     try:
-        from celery.exceptions import CeleryError  # type: ignore
-    except Exception:  # pragma: no cover
-        class CeleryError(Exception):  # type: ignore
-            pass
-
-    try:
-        task.delay(*args, **kwargs)
-        return {"queued": True, "eager": False, "deferred": False}
-    except Exception as exc:  # CeleryError or transient broker error
-        if os.getenv("CELERY_TASK_ALWAYS_EAGER") == "1":
+        logger.info(f"Attempting to queue task {task_func.__name__} with args {args}")
+        
+        # Try to queue the task
+        result = task_func.apply_async(args=args, kwargs=kwargs)
+        logger.info(f"Successfully queued task {task_func.__name__}: {result.id}")
+        return {"queued": True, "eager": False, "deferred": False, "task_id": result.id}
+        
+    except Exception as exc:
+        logger.warning(f"Celery apply_async failed for {task_func.__name__}: {exc}")
+        
+        # Check if this is a connection error (broker unavailable)
+        exc_str = str(exc).lower()
+        if any(term in exc_str for term in ["connection", "broker", "redis", "timeout"]):
+            logger.info(f"Broker connection issue, attempting eager execution for {task_func.__name__}")
+            
+            # Try eager execution as fallback
             try:
-                task.apply(args=args, kwargs=kwargs)
+                from django.conf import settings
+                # Temporarily enable eager execution
+                original_eager = getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)
+                settings.CELERY_TASK_ALWAYS_EAGER = True
+                
+                result = task_func.apply_async(args=args, kwargs=kwargs)
+                logger.info(f"Successfully executed task {task_func.__name__} eagerly")
+                
+                # Restore original setting
+                settings.CELERY_TASK_ALWAYS_EAGER = original_eager
+                
                 return {"queued": True, "eager": True, "deferred": False}
+                
             except Exception as inner:
-                logger.warning("safe_enqueue eager apply failed: %s", inner)
-                return {"queued": False, "eager": True, "deferred": True}
-        logger.warning("safe_enqueue deferred due to broker error: %s", exc)
-        return {"queued": False, "eager": False, "deferred": True}
+                logger.error(f"Eager execution also failed for {task_func.__name__}: {inner}")
+                # Restore original setting
+                try:
+                    settings.CELERY_TASK_ALWAYS_EAGER = original_eager
+                except:
+                    pass
+                return {"queued": False, "eager": False, "deferred": True, "error": str(inner)}
+        
+        # For other errors, don't defer
+        logger.error(f"Task queuing failed with non-broker error for {task_func.__name__}: {exc}")
+        return {"queued": False, "eager": False, "deferred": False, "error": str(exc)}
 
 
 def queue_ocr_task(receipt_id: int) -> dict:
@@ -477,12 +501,19 @@ def queue_ocr_task(receipt_id: int) -> dict:
     """
     import logging
     logger = logging.getLogger(__name__)
+    
+    logger.info(f"queue_ocr_task called for receipt {receipt_id}")
+    
     try:
         from receipts.tasks import process_receipt_task  # type: ignore
+        logger.info("Successfully imported process_receipt_task")
     except Exception as exc:  # keep import errors from crashing web dynos
         logger.error("queue_ocr_task: cannot import process_receipt_task: %s", exc)
-        return {"queued": False, "eager": False, "deferred": True}
-    return safe_enqueue(process_receipt_task, receipt_id)
+        return {"queued": False, "eager": False, "deferred": True, "error": f"Import failed: {exc}"}
+    
+    result = safe_enqueue(process_receipt_task, receipt_id)
+    logger.info(f"queue_ocr_task result for receipt {receipt_id}: {result}")
+    return result
 
 # ---------------------------------------------------------------------------
 # Global helpers (unchanged signatures) -------------------------------------
