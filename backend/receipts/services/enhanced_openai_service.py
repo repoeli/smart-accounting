@@ -141,7 +141,27 @@ class EnhancedOpenAIVisionService:
                 'version': upload_result.get('version')
             }
             
+            # Generate optimized URLs for different use cases
+            base_url = upload_result.get('secure_url')
+            public_id = upload_result.get('public_id')
+            
+            if base_url and public_id:
+                # Create display URL (medium quality, 800px max width)
+                cloudinary_data['display_url'] = base_url.replace(
+                    f"/image/upload/",
+                    f"/image/upload/c_limit,w_800,q_auto:good/"
+                )
+                
+                # Create thumbnail URL (small size, 300x200)
+                cloudinary_data['thumbnail_url'] = base_url.replace(
+                    f"/image/upload/",
+                    f"/image/upload/c_thumb,w_300,h_200,q_auto:good/"
+                )
+            
             logger.info(f"Cloudinary upload successful: {public_id}")
+            logger.info(f"Generated URLs - Original: {base_url}")
+            logger.info(f"Display: {cloudinary_data.get('display_url')}")
+            logger.info(f"Thumbnail: {cloudinary_data.get('thumbnail_url')}")
             return cloudinary_data
             
         except Exception as e:
@@ -429,6 +449,19 @@ def queue_ocr_task(receipt_id: int) -> dict:
                     'line_items': result.get('line_items', [])
                 }
                 receipt.processing_metadata = result.get('processing_metadata', {})
+                
+                # CRITICAL FIX: Save Cloudinary URLs to Receipt model fields
+                cloudinary_data = result.get('processing_metadata', {}).get('cloudinary', {})
+                if cloudinary_data:
+                    receipt.cloudinary_public_id = cloudinary_data.get('public_id')
+                    receipt.cloudinary_url = cloudinary_data.get('secure_url')
+                    receipt.cloudinary_display_url = cloudinary_data.get('display_url', cloudinary_data.get('secure_url'))
+                    receipt.cloudinary_thumbnail_url = cloudinary_data.get('thumbnail_url', cloudinary_data.get('secure_url'))
+                    receipt.image_width = cloudinary_data.get('width')
+                    receipt.image_height = cloudinary_data.get('height')
+                    receipt.file_size_bytes = cloudinary_data.get('bytes')
+                    logger.info(f"Saved Cloudinary URLs to receipt {receipt_id}: original={receipt.cloudinary_url}, display={receipt.cloudinary_display_url}, thumbnail={receipt.cloudinary_thumbnail_url}")
+                
                 receipt.ocr_status = 'completed'
                 receipt.save()
                 

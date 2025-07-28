@@ -279,6 +279,18 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                         receipt.processing_metadata = result.get('processing_metadata', {})
                         receipt.processing_metadata['processing_method'] = 'synchronous_fallback'
                         
+                        # CRITICAL FIX: Save Cloudinary URLs to Receipt model fields
+                        cloudinary_data = result.get('processing_metadata', {}).get('cloudinary', {})
+                        if cloudinary_data:
+                            receipt.cloudinary_public_id = cloudinary_data.get('public_id')
+                            receipt.cloudinary_url = cloudinary_data.get('secure_url')
+                            receipt.cloudinary_display_url = cloudinary_data.get('display_url', cloudinary_data.get('secure_url'))
+                            receipt.cloudinary_thumbnail_url = cloudinary_data.get('thumbnail_url', cloudinary_data.get('secure_url'))
+                            receipt.image_width = cloudinary_data.get('width')
+                            receipt.image_height = cloudinary_data.get('height')
+                            receipt.file_size_bytes = cloudinary_data.get('bytes')
+                            logger.info(f"Synchronous: Saved Cloudinary URLs to receipt {receipt.id}: display={receipt.cloudinary_display_url}, thumbnail={receipt.cloudinary_thumbnail_url}")
+                        
                         # Create transaction if we have valid data
                         if result.get('vendor_name') and result.get('total_amount'):
                             try:
@@ -448,6 +460,18 @@ class ReceiptViewSet(viewsets.ModelViewSet):
                     receipt.processing_metadata = result.get('processing_metadata', {})
                     receipt.processing_metadata['processing_method'] = 'synchronous_fallback'
                     receipt.processing_metadata['reprocessed'] = True
+                    
+                    # CRITICAL FIX: Save Cloudinary URLs to Receipt model fields
+                    cloudinary_data = result.get('processing_metadata', {}).get('cloudinary', {})
+                    if cloudinary_data:
+                        receipt.cloudinary_public_id = cloudinary_data.get('public_id')
+                        receipt.cloudinary_url = cloudinary_data.get('secure_url')
+                        receipt.cloudinary_display_url = cloudinary_data.get('display_url', cloudinary_data.get('secure_url'))
+                        receipt.cloudinary_thumbnail_url = cloudinary_data.get('thumbnail_url', cloudinary_data.get('secure_url'))
+                        receipt.image_width = cloudinary_data.get('width')
+                        receipt.image_height = cloudinary_data.get('height')
+                        receipt.file_size_bytes = cloudinary_data.get('bytes')
+                        logger.info(f"Reprocess: Saved Cloudinary URLs to receipt {receipt.id}: display={receipt.cloudinary_display_url}, thumbnail={receipt.cloudinary_thumbnail_url}")
                     
                     # Create or update transaction if we have valid data
                     if result.get('vendor_name') and result.get('total_amount'):
