@@ -430,6 +430,10 @@ def queue_ocr_task(receipt_id: int) -> dict:
         def _process_receipt_for_id(receipt_id: int):
             """Background processing function"""
             try:
+                # TIMING FIX: Add delay to ensure file is fully saved
+                import time
+                time.sleep(1)
+                logger.info(f"Starting background OCR processing for receipt {receipt_id}")
                 receipt = Receipt.objects.get(id=receipt_id)
                 service = EnhancedOpenAIVisionService()
                 
