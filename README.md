@@ -40,19 +40,19 @@ Built with modern technologies and deployed on **Heroku**, it combines robust ba
 ## 📸 Screenshots
 
 ### Dashboard Overview
-![Dashboard](screenshots/dashboard.png)  
+![Dashboard](docs/screenshots/main-dashboard.png)  
 *Real-time financial summary and analytics*
 
 ### Receipt Upload & Processing
-![Receipt Upload](screenshots/upload.png)  
+![Receipt Upload](docs/screenshots/receipt-management.png)  
 *Drag & drop upload with AI-powered OCR extraction*
 
 ### Financial Reports
-![Reports](screenshots/reports.png)  
+![Reports](docs/screenshots/financial-reports.png)  
 *Category breakdown, tax-deductible tracking, and vendor analysis*
 
 ### Subscription Management
-![Subscription](screenshots/subscription.png)  
+![Subscription](docs/screenshots/subscription-management.png)  
 *Stripe-powered tiered access control*
 
 ---
