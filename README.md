@@ -339,6 +339,8 @@ const response = await fetch('/api/v1/receipts/', {
 
 ## 🧰 Development Setup
 
+Live Demo: https://smart-frontend-production.herokuapp.com ✅
+
 ### 1. Clone the Repository
 ```bash
 git clone https://github.com/yourusername/smart-accounting.git 
