@@ -409,3 +409,8 @@ test_structure.py
 verify_production_ready.py
 test_full_integration.py
 production_test_results.json
+docs/screenshots/README.md
+screenshots/dashboard.png
+screenshots/reports.png
+screenshots/subscription.png
+screenshots/upload.png
