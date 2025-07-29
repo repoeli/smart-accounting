@@ -10,8 +10,8 @@ import subscriptionAPI from '../../services/subscriptions/subscriptionAPI';
 // Plan hierarchy (higher numbers = higher tiers)
 const PLAN_HIERARCHY = {
   basic: 1,
-  professional: 2,
-  enterprise: 3
+  premium: 2,
+  platinum: 3
 };
 
 // Default features for each plan
@@ -19,23 +19,23 @@ const DEFAULT_FEATURES = {
   basic: {
     current_plan: 'basic',
     subscription_active: false,
-    max_documents: 10,
+    max_documents: 50,
     has_api_access: false,
     has_report_export: false,
     has_bulk_upload: false,
     has_white_label: false,
   },
-  professional: {
-    current_plan: 'professional',
+  premium: {
+    current_plan: 'premium',
     subscription_active: true,
-    max_documents: 1000,
+    max_documents: 200,
     has_api_access: true,
     has_report_export: true,
-    has_bulk_upload: true,
+    has_bulk_upload: false,
     has_white_label: false,
   },
-  enterprise: {
-    current_plan: 'enterprise',
+  platinum: {
+    current_plan: 'platinum',
     subscription_active: true,
     max_documents: 999999,
     has_api_access: true,
@@ -145,18 +145,23 @@ const useReportAccess = () => {
 
     switch (reportType) {
       case 'category_breakdown':
+      case 'category-breakdown':
       case 'income_vs_expense':
+      case 'income-expense':
       case 'summary':
         return true; // Available to all plans
       
       case 'tax_deductible':
-        return hasAccess('professional');
+      case 'tax-deductible':
+        return hasAccess('premium');
       
       case 'vendor_analysis':
-        return hasAccess('professional');
+      case 'vendor-analysis':
+        return hasAccess('premium');
       
       case 'audit_log':
-        return hasAccess('enterprise');
+      case 'audit-log':
+        return hasAccess('platinum');
       
       default:
         return hasAccess('basic');
@@ -192,8 +197,8 @@ const useReportAccess = () => {
   // Upgrade prompts
   const getUpgradeMessage = useCallback((requiredPlan) => {
     const planNames = {
-      professional: 'Professional',
-      enterprise: 'Enterprise'
+      premium: 'Premium',
+      platinum: 'Platinum'
     };
     
     return `This feature requires a ${planNames[requiredPlan] || requiredPlan} subscription. Upgrade now to unlock advanced reporting capabilities.`;

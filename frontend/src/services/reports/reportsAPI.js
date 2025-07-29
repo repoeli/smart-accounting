@@ -151,6 +151,82 @@ class ReportsAPI {
   }
 
   /**
+   * Get predictive cash flow analysis (Premium tier and above)
+   * @param {Object} filters - Date range, prediction months, etc.
+   * @returns {Promise<Object>} Predictive cash flow data
+   */
+  async getPredictiveCashFlow(filters = {}) {
+    try {
+      console.log('ReportsAPI: Fetching predictive cash flow data...', filters);
+      const response = await axiosInstance.get('/reports/predictive-cash-flow/', { params: filters });
+      console.log('ReportsAPI: Predictive cash flow data fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('ReportsAPI: Predictive cash flow fetch error:', error);
+      throw new Error(`Failed to fetch predictive cash flow report: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Get spending intelligence and anomaly detection (Premium tier and above)
+   * @param {Object} filters - Date range, category filters, etc.
+   * @returns {Promise<Object>} Spending intelligence data
+   */
+  async getSpendingIntelligence(filters = {}) {
+    try {
+      console.log('ReportsAPI: Fetching spending intelligence data...', filters);
+      const response = await axiosInstance.get('/reports/spending-intelligence/', { params: filters });
+      console.log('ReportsAPI: Spending intelligence data fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('ReportsAPI: Spending intelligence fetch error:', error);
+      throw new Error(`Failed to fetch spending intelligence report: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Get business insights and KPIs (Platinum tier only)
+   * @param {Object} filters - Date range, metrics selection, etc.
+   * @returns {Promise<Object>} Business insights data
+   */
+  async getBusinessInsights(filters = {}) {
+    try {
+      console.log('ReportsAPI: Fetching business insights data...', filters);
+      const response = await axiosInstance.get('/reports/business-insights/', { params: filters });
+      console.log('ReportsAPI: Business insights data fetched successfully');
+      return response.data;
+    } catch (error) {
+      console.error('ReportsAPI: Business insights fetch error:', error);
+      throw new Error(`Failed to fetch business insights report: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
+   * Get all smart analytics data in one call (Premium tier and above)
+   * @param {Object} filters - Global filters for all analytics
+   * @returns {Promise<Object>} Combined analytics data
+   */
+  async getSmartAnalytics(filters = {}) {
+    try {
+      console.log('ReportsAPI: Fetching smart analytics data...', filters);
+      const [cashFlow, spendingIntel] = await Promise.all([
+        this.getPredictiveCashFlow(filters),
+        this.getSpendingIntelligence(filters)
+      ]);
+      
+      console.log('ReportsAPI: Smart analytics data fetched successfully');
+      return {
+        cashFlow,
+        spendingIntelligence: spendingIntel,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('ReportsAPI: Smart analytics fetch error:', error);
+      throw new Error(`Failed to fetch smart analytics: ${error.response?.data?.error || error.message}`);
+    }
+  }
+
+  /**
    * Test API connectivity and authentication
    * @returns {Promise<Object>} Connection status
    */

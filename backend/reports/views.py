@@ -23,10 +23,15 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from receipts.models import Receipt, Transaction
+from accounts.subscription_permissions import (
+    BasicReportPermission, 
+    PremiumReportPermission, 
+    PlatinumReportPermission
+)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([BasicReportPermission])
 def income_vs_expense_report(request):
     """
     Monthly Income vs Expense Report
@@ -169,7 +174,7 @@ def income_vs_expense_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([BasicReportPermission])
 def category_breakdown_report(request):
     """
     Category Breakdown Report
@@ -272,7 +277,7 @@ def category_breakdown_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([PremiumReportPermission])
 def tax_deductible_report(request):
     """
     Tax-Deductible Expenses Report
@@ -437,7 +442,7 @@ def tax_deductible_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([PremiumReportPermission])
 def vendor_analysis_report(request):
     """
     Vendor Spend Analysis Report
@@ -599,7 +604,7 @@ def vendor_analysis_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([PlatinumReportPermission])
 def audit_log_report(request):
     """
     Receipt Audit Log Report
@@ -788,7 +793,7 @@ def audit_log_report(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([BasicReportPermission])
 def report_summary(request):
     """
     Reports Summary Dashboard

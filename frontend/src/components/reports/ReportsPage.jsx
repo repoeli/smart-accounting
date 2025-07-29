@@ -18,7 +18,9 @@ import {
   Receipt, 
   Business, 
   History,
-  TrendingUp
+  TrendingUp,
+  Analytics,
+  PsychologyAlt
 } from '@mui/icons-material';
 import useReportAccess from '../../hooks/reports/useReportAccess';
 import SummaryWidget from './SummaryWidget';
@@ -28,6 +30,8 @@ import CategoryBreakdownReport from './reports/CategoryBreakdownReport';
 import TaxDeductibleReport from './reports/TaxDeductibleReport';
 import VendorAnalysisReport from './reports/VendorAnalysisReport';
 import AuditLogReport from './reports/AuditLogReport';
+import SmartInsightsDashboard from './analytics/SmartInsightsDashboard';
+import PredictiveAnalytics from './analytics/PredictiveAnalytics';
 
 const ReportsPage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
@@ -42,6 +46,24 @@ const ReportsPage = () => {
   };
 
   const reportConfigs = [
+    {
+      id: 'smart-insights',
+      title: 'Smart Insights Dashboard',
+      description: 'AI-powered comprehensive financial analytics and business intelligence',
+      icon: <Analytics />,
+      tier: 'Premium',
+      color: '#673ab7',
+      component: SmartInsightsDashboard
+    },
+    {
+      id: 'predictive-analytics',
+      title: 'Predictive Analytics',
+      description: 'Cash flow forecasting and spending predictions with AI confidence intervals',
+      icon: <PsychologyAlt />,
+      tier: 'Premium',
+      color: '#3f51b5',
+      component: PredictiveAnalytics
+    },
     {
       id: 'income-expense',
       title: 'Income vs Expense',
