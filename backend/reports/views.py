@@ -22,7 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from receipts.models import Receipt, Transaction
+from receipts.models import Receipt
 from accounts.subscription_permissions import (
     BasicReportPermission, 
     PremiumReportPermission, 
