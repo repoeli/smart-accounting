@@ -1,5 +1,15 @@
 /**
- * Report Access Hook - Subscription-based Feature Control
+ * Report Access Hook - Subscription-basedconst useReportAccess = () => {
+  const { isAuthenticated, user } = useAuth();
+  const [subscriptionData, setSubscriptionData] = useState(null);
+  const [userPlan, setUserPlan] = useState('basic');
+  const [features, setFeatures] = useState(DEFAULT_FEATURES.basic);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
+
+  // Cache timeout: 5 minutes
+  const CACHE_TIMEOUT = 5 * 60 * 1000;e Control
  * Integrates with Stripe subscription system to control report access
  */
 
@@ -54,10 +64,18 @@ const useReportAccess = () => {
   const [error, setError] = useState(null);
 
   // Fetch subscription data
-  const fetchSubscriptionData = useCallback(async () => {
+  const fetchSubscriptionData = useCallback(async (forceRefresh = false) => {
     if (!isAuthenticated || !user) {
       setUserPlan('basic');
       setFeatures(DEFAULT_FEATURES.basic);
+      setLoading(false);
+      return;
+    }
+
+    // Check cache unless forced refresh
+    const now = Date.now();
+    if (!forceRefresh && subscriptionData && (now - lastFetchTime < CACHE_TIMEOUT)) {
+      console.log('🗄️ Using cached subscription data');
       setLoading(false);
       return;
     }
@@ -66,11 +84,13 @@ const useReportAccess = () => {
       setLoading(true);
       setError(null);
 
+      console.log('🌐 Fetching fresh subscription data');
       // Fetch subscription details from our API
       const response = await subscriptionAPI.getSubscriptionDetails();
       
       if (response.subscription) {
         setSubscriptionData(response);
+        setLastFetchTime(now);
         
         // Extract plan from subscription data
         const plan = response.subscription.plan || 'basic';
@@ -88,6 +108,7 @@ const useReportAccess = () => {
         setUserPlan('basic');
         setFeatures(DEFAULT_FEATURES.basic);
         setSubscriptionData(null);
+        setLastFetchTime(now);
       }
     } catch (err) {
       console.error('Error fetching subscription data:', err);
@@ -100,7 +121,7 @@ const useReportAccess = () => {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user?.id, subscriptionData, lastFetchTime, CACHE_TIMEOUT]); // Only depend on user ID, not the entire user object
 
   // Initial fetch and refresh on auth change
   useEffect(() => {
@@ -191,7 +212,7 @@ const useReportAccess = () => {
 
   // Refresh function for manual updates
   const refreshSubscription = useCallback(() => {
-    return fetchSubscriptionData();
+    return fetchSubscriptionData(true); // Force refresh
   }, [fetchSubscriptionData]);
 
   // Upgrade prompts
