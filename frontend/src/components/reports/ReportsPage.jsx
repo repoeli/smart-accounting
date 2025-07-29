@@ -25,6 +25,7 @@ import {
 import useReportAccess from '../../hooks/reports/useReportAccess';
 import SummaryWidget from './SummaryWidget';
 import ReportCard from './ReportCard';
+import TestExportComponent from '../test/TestExportComponent';
 import IncomeVsExpenseReport from './reports/IncomeVsExpenseReport';
 import CategoryBreakdownReport from './reports/CategoryBreakdownReport';
 import TaxDeductibleReport from './reports/TaxDeductibleReport';
@@ -122,6 +123,16 @@ const ReportsPage = () => {
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12}>
             <SummaryWidget />
+          </Grid>
+        </Grid>
+
+        {/* Debug Export Test Section */}
+        <Typography variant="h5" gutterBottom sx={{ mb: 3, mt: 4 }}>
+          🧪 Export Functionality Test
+        </Typography>
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid item xs={12}>
+            <TestExportComponent />
           </Grid>
         </Grid>
 

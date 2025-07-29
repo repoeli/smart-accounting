@@ -23,7 +23,7 @@ import {
 } from '@mui/material';
 import LineChart from '../charts/LineChart';
 import BarChart from '../charts/BarChart';
-import ExportButtons from '../ExportButtons';
+import ExportButtons from '../SimpleExportButtons';
 import ReportFilters from '../ReportFilters';
 import { reportsAPI } from '../../../services/reports/reportsAPI';
 
@@ -296,9 +296,8 @@ const IncomeVsExpenseReport = ({ onBack }) => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          reportData={data}
+          data={data}
           reportType="income-expense"
-          reportRef={reportRef}
           title="Income vs Expense Report"
         />
       </Box>
