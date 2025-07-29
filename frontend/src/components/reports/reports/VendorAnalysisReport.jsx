@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -29,6 +29,7 @@ import { reportsAPI } from '../../../services/reports/reportsAPI';
 import { Store, TrendingUp, Receipt, AttachMoney } from '@mui/icons-material';
 
 const VendorAnalysisReport = ({ onBack }) => {
+  const reportRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -193,13 +194,13 @@ const VendorAnalysisReport = ({ onBack }) => {
   const summaryData = prepareSummaryData();
 
   return (
-    <Box>
+    <Box ref={reportRef}>
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
           reportData={data}
           reportType="vendor-analysis"
-          reportRef={null}
+          reportRef={reportRef}
           title="Vendor Analysis Report"
         />
       </Box>

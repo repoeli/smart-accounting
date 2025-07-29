@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -40,6 +40,7 @@ const IncomeVsExpenseReport = ({ onBack }) => {
   });
   const [chartType, setChartType] = useState('line');
   const [showComparison, setShowComparison] = useState(true);
+  const reportRef = useRef(null);
 
   // Currency formatting helper function
   const formatCurrency = (value, options = {}) => {
@@ -291,13 +292,13 @@ const IncomeVsExpenseReport = ({ onBack }) => {
   const summaryData = prepareSummaryData();
 
   return (
-    <Box>
+    <Box ref={reportRef}>
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
           reportData={data}
           reportType="income-expense"
-          reportRef={null}
+          reportRef={reportRef}
           title="Income vs Expense Report"
         />
       </Box>

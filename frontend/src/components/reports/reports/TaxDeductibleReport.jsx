@@ -245,13 +245,13 @@ const TaxDeductibleReport = ({ onBack, defaultTaxRate = 0.25 }) => {
   const summaryData = prepareSummaryData();
 
   return (
-    <Box>
+    <Box ref={reportRef}>
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
           reportData={data}
           reportType="tax-deductible"
-          reportRef={null}
+          reportRef={reportRef}
           title="Tax Deductible Report"
         />
       </Box>

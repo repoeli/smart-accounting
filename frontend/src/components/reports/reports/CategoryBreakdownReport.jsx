@@ -194,13 +194,13 @@ const CategoryBreakdownReport = () => {
   const summaryData = prepareSummaryData();
 
   return (
-    <Box>
+    <Box ref={reportRef}>
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
           reportData={data}
           reportType="category-breakdown"
-          reportRef={null}
+          reportRef={reportRef}
           title="Category Breakdown Report"
         />
       </Box>

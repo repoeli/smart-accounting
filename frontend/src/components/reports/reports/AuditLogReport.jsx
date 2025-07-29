@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Card,
@@ -174,13 +174,13 @@ const AuditLogReport = () => {
   const summaryData = prepareSummaryData();
 
   return (
-    <Box>
+    <Box ref={reportRef}>
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
           reportData={data}
           reportType="audit-log"
-          reportRef={null}
+          reportRef={reportRef}
           title="Audit Log Report"
         />
       </Box>
