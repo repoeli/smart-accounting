@@ -295,9 +295,10 @@ const IncomeVsExpenseReport = ({ onBack }) => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          data={data}
-          filename="income-vs-expense-report"
-          chartData={chartData}
+          reportData={data}
+          reportType="income-expense"
+          reportRef={null}
+          title="Income vs Expense Report"
         />
       </Box>
 

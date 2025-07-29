@@ -178,9 +178,10 @@ const AuditLogReport = () => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          data={data}
-          filename="audit-log-report"
-          chartData={null}
+          reportData={data}
+          reportType="audit-log"
+          reportRef={null}
+          title="Audit Log Report"
         />
       </Box>
 

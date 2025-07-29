@@ -198,9 +198,10 @@ const CategoryBreakdownReport = () => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          data={data}
-          filename="category-breakdown-report"
-          chartData={chartData}
+          reportData={data}
+          reportType="category-breakdown"
+          reportRef={null}
+          title="Category Breakdown Report"
         />
       </Box>
 

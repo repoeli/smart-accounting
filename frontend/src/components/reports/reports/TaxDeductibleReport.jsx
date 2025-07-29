@@ -249,9 +249,10 @@ const TaxDeductibleReport = ({ onBack, defaultTaxRate = 0.25 }) => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          data={data}
-          filename={`tax-deductible-report-${filters.tax_year}`}
-          chartData={chartData}
+          reportData={data}
+          reportType="tax-deductible"
+          reportRef={null}
+          title="Tax Deductible Report"
         />
       </Box>
 

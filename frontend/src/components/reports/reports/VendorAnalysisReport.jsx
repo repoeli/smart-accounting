@@ -197,9 +197,10 @@ const VendorAnalysisReport = ({ onBack }) => {
       {/* Export Buttons */}
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
         <ExportButtons
-          data={data}
-          filename="vendor-analysis-report"
-          chartData={chartData}
+          reportData={data}
+          reportType="vendor-analysis"
+          reportRef={null}
+          title="Vendor Analysis Report"
         />
       </Box>
 
