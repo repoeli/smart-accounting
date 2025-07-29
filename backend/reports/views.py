@@ -22,7 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from receipts.models import Receipt
+from receipts.models import Receipt, Transaction
 from accounts.subscription_permissions import (
     BasicReportPermission, 
     PremiumReportPermission, 
@@ -807,47 +807,74 @@ def report_summary(request):
         current_year = now.year
         current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         last_month_start = (current_month_start - timedelta(days=1)).replace(day=1)
+        ytd_start = datetime(current_year, 1, 1).date()
         
         # Get user's data (authenticated user)
         user_id = request.user.id
         receipts = Receipt.objects.filter(owner_id=user_id)
-        transactions = Transaction.objects.filter(owner_id=user_id)
+        
+        # Get successful receipts with extracted data
+        completed_receipts = receipts.filter(ocr_status='completed')
         
         # Quick metrics
         total_receipts = receipts.count()
-        total_transactions = transactions.count()
+        total_completed_receipts = completed_receipts.count()
         
-        # Current month vs last month
-        current_month_expenses = transactions.filter(
-            transaction_type='expense',
-            transaction_date__gte=current_month_start.date()
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
+        # Calculate expenses from receipts with extracted data
+        current_month_expenses = 0
+        last_month_expenses = 0
+        ytd_income = 0
+        ytd_expenses = 0
+        category_totals = {}
         
-        last_month_expenses = transactions.filter(
-            transaction_type='expense',
-            transaction_date__gte=last_month_start.date(),
-            transaction_date__lt=current_month_start.date()
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
+        for receipt in completed_receipts:
+            extracted_data = receipt.extracted_data or {}
+            total_amount = extracted_data.get('total', 0)
+            transaction_date_str = extracted_data.get('date')
+            transaction_type = extracted_data.get('type', 'expense')
+            category = extracted_data.get('category', 'other')
+            
+            if transaction_date_str and total_amount:
+                try:
+                    # Parse the date (handle different formats)
+                    if isinstance(transaction_date_str, str):
+                        # Try common date formats
+                        try:
+                            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            try:
+                                transaction_date = datetime.strptime(transaction_date_str, '%d/%m/%Y').date()
+                            except ValueError:
+                                continue  # Skip if date format is not recognized
+                    else:
+                        continue
+                    
+                    amount = float(total_amount)
+                    
+                    # Current month vs last month
+                    if transaction_date >= current_month_start.date():
+                        if transaction_type == 'expense':
+                            current_month_expenses += amount
+                    elif transaction_date >= last_month_start.date():
+                        if transaction_type == 'expense':
+                            last_month_expenses += amount
+                    
+                    # Year to date
+                    if transaction_date >= ytd_start:
+                        if transaction_type == 'income':
+                            ytd_income += amount
+                        elif transaction_type == 'expense':
+                            ytd_expenses += amount
+                            # Track categories for YTD
+                            if category not in category_totals:
+                                category_totals[category] = 0
+                            category_totals[category] += amount
+                            
+                except (ValueError, TypeError):
+                    continue  # Skip invalid data
         
-        # Year to date
-        ytd_start = datetime(current_year, 1, 1).date()
-        ytd_income = transactions.filter(
-            transaction_type='income',
-            transaction_date__gte=ytd_start
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
-        
-        ytd_expenses = transactions.filter(
-            transaction_type='expense',
-            transaction_date__gte=ytd_start
-        ).aggregate(total=Sum('total_amount'))['total'] or 0
-        
-        # Top categories this year
-        top_categories = transactions.filter(
-            transaction_date__gte=ytd_start,
-            transaction_type='expense'
-        ).values('category').annotate(
-            total=Sum('total_amount')
-        ).order_by('-total')[:5]
+        # Top categories this year (from our calculations)
+        top_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)[:5]
         
         # Recent activity
         recent_receipts = receipts.filter(
@@ -858,7 +885,7 @@ def report_summary(request):
             'user': request.user.email,
             'quick_metrics': {
                 'total_receipts': total_receipts,
-                'total_transactions': total_transactions,
+                'total_completed_receipts': total_completed_receipts,
                 'current_month_expenses': float(current_month_expenses),
                 'last_month_expenses': float(last_month_expenses),
                 'month_over_month_change': ((float(current_month_expenses) - float(last_month_expenses)) / float(last_month_expenses) * 100) if last_month_expenses > 0 else 0,
@@ -869,9 +896,9 @@ def report_summary(request):
             },
             'top_categories_ytd': [
                 {
-                    'category': cat['category'],
-                    'category_display': dict(Transaction.CATEGORY_CHOICES).get(cat['category'], cat['category']),
-                    'total': float(cat['total'])
+                    'category': cat[0],
+                    'category_display': cat[0].replace('_', ' ').title(),
+                    'total': float(cat[1])
                 }
                 for cat in top_categories
             ],
