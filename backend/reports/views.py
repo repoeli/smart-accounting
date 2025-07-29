@@ -57,14 +57,15 @@ def income_vs_expense_report(request):
         currency_filter = request.GET.get('currency')
         is_business_filter = request.GET.get('is_business')
         
-        # Set default date range (12 months)
+        # Set default date range (10 years for comprehensive historical data)
         if not end_date:
             end_date = timezone.now().date()
         else:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             
         if not start_date:
-            start_date = end_date - timedelta(days=365)
+            # Use 10 years back to capture all historical data
+            start_date = end_date - timedelta(days=365 * 10)
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
@@ -236,14 +237,15 @@ def category_breakdown_report(request):
         transaction_type = request.GET.get('transaction_type', 'expense')
         limit = int(request.GET.get('limit', 20))
         
-        # Set default date range
+        # Set default date range (10 years for comprehensive historical data)
         if not end_date:
             end_date = timezone.now().date()
         else:
             end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             
         if not start_date:
-            start_date = end_date - timedelta(days=365)
+            # Use 10 years back to capture all historical data
+            start_date = end_date - timedelta(days=365 * 10)
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
