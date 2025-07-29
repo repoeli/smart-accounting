@@ -76,70 +76,108 @@ def income_vs_expense_report(request):
             )
         
         user_id = request.user.id
-        transactions = Transaction.objects.filter(
-            owner_id=user_id,
-            transaction_date__gte=start_date,
-            transaction_date__lte=end_date
-        )
         
-        # Apply filters
-        if currency_filter:
-            transactions = transactions.filter(currency=currency_filter)
+        # Get user's receipts with completed OCR that have extracted data
+        receipts = Receipt.objects.filter(
+            owner_id=user_id,
+            ocr_status='completed',
+            extracted_data__isnull=False
+        ).exclude(extracted_data={})
+        
+        # Filter by date range using upload date and extracted transaction date
+        filtered_receipts = []
+        for receipt in receipts:
+            extracted_data = receipt.extracted_data or {}
+            transaction_date_str = extracted_data.get('date')
             
-        # Note: is_business logic would need to be added to Transaction model
-        # For now, we'll use a placeholder based on category or manual tagging
+            if transaction_date_str:
+                try:
+                    # Parse the date (handle different formats)
+                    if isinstance(transaction_date_str, str):
+                        try:
+                            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            try:
+                                transaction_date = datetime.strptime(transaction_date_str, '%d/%m/%Y').date()
+                            except ValueError:
+                                continue
+                    else:
+                        continue
+                    
+                    # Filter by date range
+                    if start_date <= transaction_date <= end_date:
+                        # Apply currency filter if specified
+                        if currency_filter:
+                            receipt_currency = extracted_data.get('currency', 'GBP')
+                            if receipt_currency.upper() != currency_filter.upper():
+                                continue
+                        
+                        filtered_receipts.append({
+                            'receipt': receipt,
+                            'transaction_date': transaction_date,
+                            'total_amount': float(extracted_data.get('total', 0)),
+                            'transaction_type': extracted_data.get('type', 'expense'),
+                            'currency': extracted_data.get('currency', 'GBP'),
+                            'vendor': extracted_data.get('vendor', 'Unknown')
+                        })
+                except (ValueError, TypeError):
+                    continue
         
         # Group by month and transaction type
-        monthly_data = transactions.annotate(
-            month=TruncMonth('transaction_date'),
-            year=Extract('transaction_date', 'year'),
-            month_num=Extract('transaction_date', 'month')
-        ).values('month', 'year', 'month_num').annotate(
-            total_income=Sum('total_amount', filter=Q(transaction_type='income')),
-            total_expenses=Sum('total_amount', filter=Q(transaction_type='expense')),
-            transaction_count=Count('id'),
-            income_count=Count('id', filter=Q(transaction_type='income')),
-            expense_count=Count('id', filter=Q(transaction_type='expense'))
-        ).order_by('month')
+        monthly_data = {}
         
-        # Calculate net balance and format response
+        for item in filtered_receipts:
+            transaction_date = item['transaction_date']
+            month_key = transaction_date.strftime('%Y-%m')
+            
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {
+                    'period': month_key,
+                    'year': transaction_date.year,
+                    'month': transaction_date.month,
+                    'income': 0,
+                    'expenses': 0,
+                    'transaction_count': 0,
+                    'income_count': 0,
+                    'expense_count': 0
+                }
+            
+            amount = item['total_amount']
+            transaction_type = item['transaction_type']
+            
+            if transaction_type == 'income':
+                monthly_data[month_key]['income'] += amount
+                monthly_data[month_key]['income_count'] += 1
+            else:  # expense
+                monthly_data[month_key]['expenses'] += amount
+                monthly_data[month_key]['expense_count'] += 1
+            
+            monthly_data[month_key]['transaction_count'] += 1
+        
+        # Convert to list and calculate net balance and growth
         report_data = []
         previous_net = 0
         
-        for month_data in monthly_data:
-            income = float(month_data['total_income'] or 0)
-            expenses = float(month_data['total_expenses'] or 0)
+        for month_key in sorted(monthly_data.keys()):
+            month_data = monthly_data[month_key]
+            income = month_data['income']
+            expenses = month_data['expenses']
             net_balance = income - expenses
             growth_rate = 0
             
             if previous_net != 0:
                 growth_rate = ((net_balance - previous_net) / abs(previous_net)) * 100
             
-            report_data.append({
-                'period': month_data['month'].strftime('%Y-%m'),
-                'year': month_data['year'],
-                'month': month_data['month_num'],
-                'income': income,
-                'expenses': expenses,
-                'net_balance': net_balance,
-                'growth_rate': round(growth_rate, 2),
-                'transaction_count': month_data['transaction_count'],
-                'income_transactions': month_data['income_count'],
-                'expense_transactions': month_data['expense_count']
-            })
+            month_data['net_balance'] = net_balance
+            month_data['growth_rate'] = round(growth_rate, 2)
             
+            report_data.append(month_data)
             previous_net = net_balance
         
-        # Calculate summary statistics using database aggregations
-        summary_totals = transactions.aggregate(
-            total_income=Sum('total_amount', filter=Q(transaction_type='income'), output_field=DecimalField()),
-            total_expenses=Sum('total_amount', filter=Q(transaction_type='expense'), output_field=DecimalField()),
-            total_months=Count('id', distinct=True, filter=Q(transaction_date__month__isnull=False))
-        )
-        
-        total_income = float(summary_totals['total_income'] or 0)
-        total_expenses = float(summary_totals['total_expenses'] or 0)
-        total_months = len(report_data) if report_data else 1  # Use report_data length for accurate month count
+        # Calculate summary statistics
+        total_income = sum(item['total_amount'] for item in filtered_receipts if item['transaction_type'] == 'income')
+        total_expenses = sum(item['total_amount'] for item in filtered_receipts if item['transaction_type'] == 'expense')
+        total_months = len(monthly_data) if monthly_data else 1
         avg_monthly_income = total_income / total_months if total_months > 0 else 0
         avg_monthly_expenses = total_expenses / total_months if total_months > 0 else 0
         
@@ -209,42 +247,90 @@ def category_breakdown_report(request):
         else:
             start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         
-        # Get user's transactions (authenticated user)
+        # Get user's receipts with completed OCR (authenticated user)
         user_id = request.user.id
-        transactions = Transaction.objects.filter(
+        receipts = Receipt.objects.filter(
             owner_id=user_id,
-            transaction_date__gte=start_date,
-            transaction_date__lte=end_date,
-            transaction_type=transaction_type
-        )
+            ocr_status='completed',
+            extracted_data__isnull=False
+        ).exclude(extracted_data={})
+        
+        # Filter and process receipts
+        filtered_receipts = []
+        total_amount = 0
+        
+        for receipt in receipts:
+            extracted_data = receipt.extracted_data or {}
+            transaction_date_str = extracted_data.get('date')
+            receipt_type = extracted_data.get('type', 'expense')
+            amount = float(extracted_data.get('total', 0))
+            
+            # Skip if not the requested transaction type
+            if receipt_type != transaction_type:
+                continue
+                
+            if transaction_date_str and amount > 0:
+                try:
+                    # Parse the date
+                    if isinstance(transaction_date_str, str):
+                        try:
+                            transaction_date = datetime.strptime(transaction_date_str, '%Y-%m-%d').date()
+                        except ValueError:
+                            try:
+                                transaction_date = datetime.strptime(transaction_date_str, '%d/%m/%Y').date()
+                            except ValueError:
+                                continue
+                    else:
+                        continue
+                    
+                    # Filter by date range
+                    if start_date <= transaction_date <= end_date:
+                        # Get category (use 'other' as default)
+                        category = extracted_data.get('category', 'other')
+                        if not category:
+                            category = 'other'
+                        
+                        filtered_receipts.append({
+                            'category': category,
+                            'amount': amount,
+                            'vendor': extracted_data.get('vendor', 'Unknown')
+                        })
+                        total_amount += amount
+                        
+                except (ValueError, TypeError):
+                    continue
         
         # Group by category
-        category_data = transactions.values('category').annotate(
-            total_amount=Sum('total_amount', output_field=DecimalField()),
-            transaction_count=Count('id')
-        ).order_by('-total_amount')[:limit]
+        category_data = {}
+        for receipt in filtered_receipts:
+            category = receipt['category']
+            if category not in category_data:
+                category_data[category] = {
+                    'total_amount': 0,
+                    'transaction_count': 0
+                }
+            category_data[category]['total_amount'] += receipt['amount']
+            category_data[category]['transaction_count'] += 1
         
-        # Calculate total for percentage calculation
-        total_amount = transactions.aggregate(total=Sum('total_amount'))['total'] or 0
-        
-        # Format response with percentages
+        # Format response with percentages and sort by amount
         categories = []
-        for cat_data in category_data:
-            amount = float(cat_data['total_amount'])
-            percentage = (amount / float(total_amount)) * 100 if total_amount > 0 else 0
-            count = cat_data['transaction_count']
+        for category, data in category_data.items():
+            amount = data['total_amount']
+            percentage = (amount / total_amount) * 100 if total_amount > 0 else 0
+            count = data['transaction_count']
             avg_amount = amount / count if count > 0 else 0
             
             categories.append({
-                'category': cat_data['category'],
-                'category_display': dict(Transaction.CATEGORY_CHOICES).get(
-                    cat_data['category'], cat_data['category']
-                ),
+                'category': category,
+                'category_display': category.replace('_', ' ').title(),
                 'total_amount': amount,
                 'percentage': round(percentage, 2),
                 'transaction_count': count,
                 'avg_amount': round(avg_amount, 2)
             })
+        
+        # Sort by total amount and limit
+        categories = sorted(categories, key=lambda x: x['total_amount'], reverse=True)[:limit]
         
         vendor_data = []  # Simplified for now
         
@@ -259,10 +345,10 @@ def category_breakdown_report(request):
                 'limit': limit
             },
             'summary': {
-                'total_amount': float(total_amount),
-                'total_transactions': transactions.count(),
+                'total_amount': total_amount,
+                'total_transactions': len(filtered_receipts),
                 'categories_count': len(categories),
-                'avg_per_category': float(total_amount) / len(categories) if categories else 0
+                'avg_per_category': total_amount / len(categories) if categories else 0
             },
             'categories': categories,
             'top_vendors': vendor_data,
