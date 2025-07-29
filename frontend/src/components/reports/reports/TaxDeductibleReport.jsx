@@ -34,6 +34,7 @@ import { reportsAPI } from '../../../services/reports/reportsAPI';
  *                                  when not provided by backend (default: 0.25 = 25%)
  */
 const TaxDeductibleReport = ({ onBack, defaultTaxRate = 0.25 }) => {
+  const reportRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

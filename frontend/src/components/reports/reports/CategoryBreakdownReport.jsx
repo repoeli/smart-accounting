@@ -27,6 +27,7 @@ import ReportFilters from '../ReportFilters';
 import { reportsAPI } from '../../../services/reports/reportsAPI';
 
 const CategoryBreakdownReport = () => {
+  const reportRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
