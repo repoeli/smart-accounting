@@ -62,6 +62,10 @@ const useReportAccess = () => {
   const [features, setFeatures] = useState(DEFAULT_FEATURES.basic);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
+
+  // Cache timeout: 5 minutes
+  const CACHE_TIMEOUT = 5 * 60 * 1000;
 
   // Fetch subscription data
   const fetchSubscriptionData = useCallback(async (forceRefresh = false) => {
