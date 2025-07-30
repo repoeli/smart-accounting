@@ -9,16 +9,17 @@
 1. [🚀 Overview](#-overview)
 2. [📸 Screenshots](#-screenshots)
 3. [🛠️ Tech Stack](#️-tech-stack)
-4. [🔌 Key Features](#-key-features)
-5. [📦 Installation](#-installation)
-6. [🌐 Environment Variables](#-environment-variables)
-7. [💻 Usage](#-usage)
-8. [🧩 API Reference](#-api-reference)
-9. [🧰 Development Setup](#-development-setup)
-10. [🧪 Testing & Validation](#-testing--validation)
-11. [🧑‍💻 Contributing](#️-contributing)
-12. [📄 License](#-license)
-13. [🌟 Acknowledgements](#-acknowledgements)
+4. [�️ Database Schema](#️-database-schema)
+5. [�🔌 Key Features](#-key-features)
+6. [📦 Installation](#-installation)
+7. [🌐 Environment Variables](#-environment-variables)
+8. [💻 Usage](#-usage)
+9. [🧩 API Reference](#-api-reference)
+10. [🧰 Development Setup](#-development-setup)
+11. [🧪 Testing & Validation](#-testing--validation)
+12. [🧑‍💻 Contributing](#️-contributing)
+13. [📄 License](#-license)
+14. [🌟 Acknowledgements](#-acknowledgements)
 
 ---
 
@@ -70,6 +71,102 @@ Built with modern technologies and deployed on **Heroku**, it combines robust ba
 | **Payments** | Stripe Subscriptions (Test Mode) |
 | **Deployment** | Heroku |
 | **CI/CD** | GitHub Actions (Auto-deploy) |
+
+---
+
+## 🗄️ Database Schema
+
+### Entity-Relationship Diagram (ERD)
+
+![Database ERD](docs/ERDiagramSized.png)  
+*Smart Accounting Database Schema - Entity Relationship Diagram*
+
+### Core Entities
+
+#### 👤 **accounts_account Table (User Authentication)**
+- **Database Table:** `accounts_account`
+- **Primary Purpose:** User authentication and account management
+- **Key Fields:** 
+  - `id` (BigAutoField, Primary Key)
+  - `username` (CharField, 150, Unique)
+  - `email` (CharField, 254, Unique)
+  - `first_name`, `last_name` (CharField, 150)
+  - `phone_number` (CharField, 20, Nullable)
+  - `company_name` (CharField, 255, Nullable)
+  - `user_type` (CharField, 20)
+  - `subscription_plan` (CharField, 20)
+  - `stripe_customer_id`, `stripe_subscription_id` (CharField, 255, Nullable)
+  - `subscription_status` (CharField, 50)
+  - `address`, `city`, `postal_code`, `country` (CharField, Nullable)
+- **Relationships:** One-to-Many with receipts_receipt, One-to-One with subscriptions_subscription
+
+#### 🧾 **Receipt Table**
+- **Primary Purpose:** Store uploaded receipts and AI-extracted data
+- **Key Fields:** `id`, `owner` (FK), `cloudinary_url`, `original_filename`, `extracted_data`, `processing_metadata`
+- **Relationships:** Many-to-One with User, One-to-One with Transaction
+- **AI Integration:** Stores OCR results from OpenAI GPT-4o and XAI Grok APIs
+- **Advanced Features:** Cloudinary integration, confidence scoring, manual verification
+
+#### � **Transaction Table**
+- **Primary Purpose:** Normalized transaction data extracted from receipts
+- **Key Fields:** `id`, `receipt` (FK), `owner` (FK), `vendor_name`, `transaction_date`, `total_amount`, `category`
+- **Relationships:** One-to-One with Receipt, Many-to-One with User
+- **Categories:** Meals, Travel, Office Supplies, Utilities, Software, Hardware, Marketing, etc.
+- **Features:** VAT tracking, line items, expense/income classification
+
+#### �💳 **Subscription Table**
+- **Primary Purpose:** Manage user subscription tiers and Stripe billing
+- **Key Fields:** `id`, `user` (FK), `plan`, `stripe_subscription_id`, `status`, `max_documents`
+- **Relationships:** One-to-One with User
+- **Plans:** `basic` (50 docs), `premium` (200 docs), `platinum` (unlimited)
+- **Features:** API access, report export, bulk upload permissions
+
+#### 💸 **PaymentHistory Table**
+- **Primary Purpose:** Track subscription payments and billing history
+- **Key Fields:** `id`, `user` (FK), `stripe_invoice_id`, `amount_paid`, `status`, `payment_date`
+- **Relationships:** Many-to-One with User
+- **Integration:** Stripe invoice tracking, PDF receipts, payment status
+
+#### 📊 **APIUsageStats Table**
+- **Primary Purpose:** Monitor AI API costs and performance metrics
+- **Key Fields:** `id`, `date`, `api_name`, `requests_count`, `total_cost_usd`, `total_tokens`
+- **Features:** Daily aggregation, success/failure tracking, cost optimization
+
+### Database Design Principles
+
+✅ **Normalized Structure** - Third Normal Form (3NF) compliance  
+✅ **Foreign Key Constraints** - Referential integrity maintained  
+✅ **Indexed Fields** - Optimized for common queries (`user_id`, `date`, `category`)  
+✅ **Scalable Design** - Ready for horizontal scaling with partition strategies  
+✅ **Audit Trail** - Timestamps for creation and modification tracking  
+
+### Data Flow Architecture
+
+```mermaid
+graph TD
+    A[User Registration] --> B[accounts_account]
+    B --> C[Subscription Creation]
+    C --> D[subscriptions_subscription]
+    B --> E[Receipt Upload]
+    E --> F[AI Processing]
+    F --> G[receipts_receipt]
+    G --> H[Transaction Extraction]
+    H --> I[receipts_transaction]
+    I --> J[Financial Reports]
+    D --> K[Access Control]
+    K --> J
+    D --> L[Payment Processing]
+    L --> M[subscriptions_paymenthistory]
+    F --> N[API Cost Tracking]
+    N --> O[receipts_apiusagestats]
+    
+    style B fill:#e1f5fe
+    style D fill:#f3e5f5
+    style G fill:#e8f5e8
+    style I fill:#fff3e0
+    style M fill:#fce4ec
+    style O fill:#f1f8e9
+```
 
 ---
 
