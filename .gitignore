@@ -203,6 +203,7 @@ processed_images/
 # Generated reports
 reports_temp/
 generated_reports/
+code_recovery_20250724_032803
 
 # Database dumps
 *.sql
@@ -414,3 +415,10 @@ screenshots/dashboard.png
 screenshots/reports.png
 screenshots/subscription.png
 screenshots/upload.png
+PRODUCTION_DEPLOYMENT_PLAN.md
+PRODUCTION_READINESS_ASSESSMENT.md
+SMART_ANALYTICS_IMPLEMENTATION_SUMMARY.md
+test_export_blockers.py
+test_smart_analytics_integration.py
+test_subscription_tier.py
+docs/screenshots/database-erd.png

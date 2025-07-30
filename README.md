@@ -78,7 +78,7 @@ Built with modern technologies and deployed on **Heroku**, it combines robust ba
 
 ### Entity-Relationship Diagram (ERD)
 
-![Database ERD](docs/ERDiagramSized.png)  
+![Database ERD](docs/ERDiagram.png)  
 *Smart Accounting Database Schema - Entity Relationship Diagram*
 
 ### Core Entities
